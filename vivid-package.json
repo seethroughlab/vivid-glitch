@@ -23,5 +23,10 @@
     "gpu/static_glitch",
     "gpu/datamosh",
     "gpu/visual_glitch"
-  ]
+  ],
+  "dependencies": {},
+  "tests": {
+    "graphs": [],
+    "cpp": []
+  }
 }
