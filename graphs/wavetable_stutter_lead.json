@@ -1,0 +1,88 @@
+{
+  "nodes": {
+    "clock_8th":  { "type": "Clock", "params": { "bpm": 280.0 } },
+    "clock_beat": { "type": "Clock", "params": { "bpm": 140.0 } },
+    "clock_bar":  { "type": "Clock", "params": { "bpm": 35.0 } },
+
+    "melody":     { "type": "NotePattern", "params": {
+      "steps": 8, "beats_per_step": 1, "gate_length": 0.7, "velocity": 0.85, "octave": 5,
+      "root_0": 0,  "type_0": 0,
+      "root_1": 4,  "type_1": 0,
+      "root_2": 7,  "type_2": 0,
+      "root_3": 0,  "type_3": 0,
+      "root_4": 5,  "type_4": 1,
+      "root_5": 9,  "type_5": 1,
+      "root_6": 7,  "type_6": 0,
+      "root_7": 4,  "type_7": 0
+    }},
+
+    "lead":       { "type": "WavetableSynth", "params": {
+      "wavetable": 2, "position": 0.5, "amplitude": 0.3,
+      "warp_mode": 7, "warp_amount": 0.2,
+      "attack": 0.01, "decay": 0.2, "sustain": 0.5, "release": 0.15,
+      "filter_type": 1, "filter_cutoff": 6000.0, "filter_resonance": 0.3,
+      "filter_attack": 0.01, "filter_decay": 0.3, "filter_sustain": 0.3, "filter_release": 0.2,
+      "filter_env_amount": 0.4, "filter_keytrack": 0.6,
+      "position_attack": 0.01, "position_decay": 0.4, "position_sustain": 0.2, "position_release": 0.3,
+      "position_env_amount": 0.5,
+      "unison_voices": 3, "unison_spread": 12.0, "unison_stereo": 0.6,
+      "sub_level": 0.15, "sub_octave": 0
+    }},
+
+    "lfo_pitch":  { "type": "LFO", "params": { "frequency": 5.5, "amplitude": 0.15, "offset": 0.0 } },
+
+    "kick":       { "type": "DrumKick",  "params": { "pitch": 52.0, "pitch_env": 170.0, "decay": 0.25, "click": 0.3, "volume": 0.7 } },
+    "snare":      { "type": "DrumSnare", "params": { "pitch": 200.0, "tone": 0.45, "noise": 0.55, "noise_decay": 0.12, "volume": 0.5 } },
+    "hat":        { "type": "DrumHiHat", "params": { "decay": 0.035, "tone": 0.7, "volume": 0.2 } },
+
+    "drum_mix":   { "type": "Gain", "params": { "gain": 0.85 } },
+
+    "beat_rep":   { "type": "BeatRepeat", "params": { "chance": 0.25, "size": 0.054, "count": 3, "decay": 0.2, "mix": 1.0 } },
+    "scratch":    { "type": "Scratch",    "params": { "chance": 0.15, "size": 0.2, "speed": 1.5, "speed_rand": 0.4, "motion": 0, "mix": 1.0 } },
+    "reverse":    { "type": "Reverse",    "params": { "chance": 0.2, "size": 0.14, "mix": 1.0 } },
+
+    "delay1":     { "type": "Delay",  "params": { "time": 0.214, "feedback": 0.35, "mix": 0.25 } },
+    "master":     { "type": "Gain",   "params": { "gain": 0.8 } },
+
+    "out":        { "type": "audio_out", "params": {} },
+
+    "title":      { "type": "Text", "params": { "text": "STUTTER", "size": 0.45, "r": 0.85, "g": 0.85, "b": 0.9 } },
+    "vis_glitch": { "type": "Visual Glitch", "params": { "shift_chance": 0.2, "block_chance": 0.2, "scan_chance": 0.3, "pixelate_chance": 0.15, "intensity": 0.7, "duration": 0.15, "mix": 1.0 } },
+    "fb":         { "type": "Feedback", "params": { "decay": 0.85, "mix": 0.4, "zoom": 1.01 } },
+    "vout":       { "type": "video_out", "params": {} }
+  },
+  "connections": [
+    { "from": "clock_8th/beat_phase",  "to": "melody/beat_phase" },
+    { "from": "melody/notes",          "to": "lead/notes" },
+    { "from": "melody/velocities",     "to": "lead/velocities" },
+    { "from": "melody/gates",          "to": "lead/gates" },
+
+    { "from": "lfo_pitch/value",       "to": "lead/pitch_mod" },
+
+    { "from": "clock_beat/beat_phase", "to": "kick/phase" },
+    { "from": "clock_beat/beat_phase", "to": "snare/phase" },
+    { "from": "clock_8th/beat_phase",  "to": "hat/phase" },
+
+    { "from": "kick/output",           "to": "drum_mix/input" },
+    { "from": "snare/output",          "to": "drum_mix/input" },
+    { "from": "hat/output",            "to": "drum_mix/input" },
+
+    { "from": "lead/output_left",      "to": "delay1/input" },
+    { "from": "delay1/output",         "to": "master/input" },
+    { "from": "drum_mix/output",       "to": "master/input" },
+
+    { "from": "clock_8th/beat_phase",  "to": "beat_rep/phase" },
+    { "from": "clock_bar/beat_phase",  "to": "scratch/phase" },
+    { "from": "clock_beat/beat_phase", "to": "reverse/phase" },
+
+    { "from": "master/output",         "to": "beat_rep/input" },
+    { "from": "beat_rep/output",       "to": "scratch/input" },
+    { "from": "scratch/output",        "to": "reverse/input" },
+    { "from": "reverse/output",        "to": "out/input" },
+
+    { "from": "title/texture",         "to": "vis_glitch/input" },
+    { "from": "vis_glitch/texture",    "to": "fb/input" },
+    { "from": "fb/texture",            "to": "vout/input" },
+    { "from": "clock_8th/beat_phase",  "to": "vis_glitch/phase" }
+  ]
+}

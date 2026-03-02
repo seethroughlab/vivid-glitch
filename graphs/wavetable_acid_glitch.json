@@ -1,0 +1,75 @@
+{
+  "nodes": {
+    "clock_16th": { "type": "Clock", "params": { "bpm": 560.0 } },
+    "clock_beat": { "type": "Clock", "params": { "bpm": 140.0 } },
+    "clock_half": { "type": "Clock", "params": { "bpm": 70.0 } },
+
+    "seq":        { "type": "NotePattern", "params": {
+      "steps": 8, "beats_per_step": 2, "gate_length": 0.6, "velocity": 0.9, "octave": 3,
+      "root_0": 0,  "type_0": 1,
+      "root_1": 0,  "type_1": 1,
+      "root_2": 3,  "type_2": 1,
+      "root_3": 3,  "type_3": 1,
+      "root_4": 5,  "type_4": 0,
+      "root_5": 3,  "type_5": 1,
+      "root_6": 0,  "type_6": 4,
+      "root_7": 0,  "type_7": 1
+    }},
+
+    "acid":       { "type": "WavetableSynth", "params": {
+      "wavetable": 5, "position": 0.1, "amplitude": 0.18,
+      "warp_mode": 1, "warp_amount": 0.4,
+      "attack": 0.005, "decay": 0.15, "sustain": 0.0, "release": 0.05,
+      "filter_type": 1, "filter_cutoff": 800.0, "filter_resonance": 0.7,
+      "filter_attack": 0.005, "filter_decay": 0.2, "filter_sustain": 0.0, "filter_release": 0.08,
+      "filter_env_amount": 0.85, "filter_keytrack": 0.5,
+      "portamento": 30.0, "env_bypass": 0
+    }},
+
+    "lfo_warp":   { "type": "LFO", "params": { "frequency": 0.25, "amplitude": 0.3, "offset": 0.0 } },
+
+    "kick":       { "type": "DrumKick",  "params": { "pitch": 48.0, "pitch_env": 200.0, "decay": 0.3, "click": 0.25, "drive": 0.4, "volume": 0.75 } },
+    "hat":        { "type": "DrumHiHat", "params": { "decay": 0.04, "tone": 0.65, "volume": 0.25 } },
+
+    "mix":        { "type": "Gain", "params": { "gain": 0.8 } },
+
+    "stutter":    { "type": "Stutter",    "params": { "chance": 0.3, "size": 0.054, "count": 4, "envelope": 0, "env_amount": 0.5, "mix": 1.0 } },
+    "tape_stop":  { "type": "TapeStop",   "params": { "chance": 0.1, "stop_time": 0.3, "start_time": 0.12, "mode": 0, "mix": 1.0 } },
+    "distort":    { "type": "Distortion", "params": { "drive": 0.4, "tone": 0.6, "mix": 0.5 } },
+
+    "out":        { "type": "audio_out", "params": {} },
+
+    "title":      { "type": "Text", "params": { "text": "ACID", "size": 0.6, "r": 0.9, "g": 0.9, "b": 0.9 } },
+    "vis_glitch": { "type": "Visual Glitch", "params": { "shift_chance": 0.35, "block_chance": 0.3, "scan_chance": 0.25, "static_chance": 0.15, "intensity": 0.9, "duration": 0.12, "mix": 1.0 } },
+    "levels1":    { "type": "Levels", "params": { "contrast": 1.5 } },
+    "vout":       { "type": "video_out", "params": {} }
+  },
+  "connections": [
+    { "from": "clock_16th/beat_phase", "to": "seq/beat_phase" },
+    { "from": "seq/notes",             "to": "acid/notes" },
+    { "from": "seq/velocities",        "to": "acid/velocities" },
+    { "from": "seq/gates",             "to": "acid/gates" },
+
+    { "from": "lfo_warp/value",        "to": "acid/position_mod" },
+
+    { "from": "clock_beat/beat_phase", "to": "kick/phase" },
+    { "from": "clock_16th/beat_phase", "to": "hat/phase" },
+
+    { "from": "acid/output_left",      "to": "distort/input" },
+    { "from": "distort/output",        "to": "mix/input" },
+    { "from": "kick/output",           "to": "mix/input" },
+    { "from": "hat/output",            "to": "mix/input" },
+
+    { "from": "clock_beat/beat_phase", "to": "stutter/phase" },
+    { "from": "clock_half/beat_phase", "to": "tape_stop/phase" },
+
+    { "from": "mix/output",            "to": "stutter/input" },
+    { "from": "stutter/output",        "to": "tape_stop/input" },
+    { "from": "tape_stop/output",      "to": "out/input" },
+
+    { "from": "title/texture",         "to": "vis_glitch/input" },
+    { "from": "vis_glitch/texture",    "to": "levels1/input" },
+    { "from": "levels1/texture",       "to": "vout/input" },
+    { "from": "clock_beat/beat_phase", "to": "vis_glitch/phase" }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "nodes": {
+    "vid": { "type": "MovieFileIn", "params": { "file": "media/clip_035.mp4" } },
+    "audio": { "type": "MovieFileAudioIn", "params": { "file": "media/clip_035.mp4" } },
+    "clock1": { "type": "Clock", "params": { "bpm": 130.0 } },
+    "lfo_scan": { "type": "LFO", "params": { "frequency": 0.3, "amplitude": 0.15, "offset": 0.2 } },
+    "datamosh": { "type": "Datamosh", "params": { "amount": 0.6, "displacement": 0.4, "blend": 0.6, "color_bleed": 0.3, "mix": 1.0 } },
+    "vhs": { "type": "VHS", "params": { "tracking": 0.4, "color_bleed": 0.6, "noise": 0.15, "head_switch": 0.4, "wobble": 0.3, "speed": 1.2, "mix": 0.7 } },
+    "vis_glitch": { "type": "Visual Glitch", "params": { "shift_chance": 0.25, "block_chance": 0.25, "scan_chance": 0.2, "static_chance": 0.1, "pixelate_chance": 0.1, "invert_chance": 0.1, "intensity": 0.8, "duration": 0.15, "mix": 1.0 } },
+    "audio_glitch": { "type": "Glitch", "params": { "repeat_chance": 0.25, "reverse_chance": 0.2, "stutter_chance": 0.2, "scratch_chance": 0.15, "tape_chance": 0.1, "shift_chance": 0.1, "mix": 1.0 } },
+    "gain1": { "type": "Gain", "params": { "gain": 0.8 } },
+    "vout": { "type": "video_out", "params": {} },
+    "aout": { "type": "audio_out", "params": {} }
+  },
+  "connections": [
+    { "from": "vid/texture",            "to": "datamosh/input" },
+    { "from": "datamosh/texture",       "to": "vhs/input" },
+    { "from": "vhs/texture",            "to": "vis_glitch/input" },
+    { "from": "vis_glitch/texture",     "to": "vout/input" },
+    { "from": "clock1/beat_phase",      "to": "vis_glitch/phase" },
+    { "from": "clock1/beat_phase",      "to": "audio_glitch/phase" },
+    { "from": "clock1/beat_phase",      "to": "datamosh/reset_phase" },
+    { "from": "lfo_scan/value",         "to": "vhs/wobble" },
+    { "from": "vid/time",               "to": "audio/video_time" },
+    { "from": "audio/left",             "to": "audio_glitch/input" },
+    { "from": "audio_glitch/output",    "to": "gain1/input" },
+    { "from": "gain1/output",           "to": "aout/input" }
+  ]
+}

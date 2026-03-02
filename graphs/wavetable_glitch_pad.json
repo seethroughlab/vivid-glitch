@@ -1,0 +1,67 @@
+{
+  "nodes": {
+    "clock":     { "type": "Clock", "params": { "bpm": 120.0 } },
+    "clock_2bar": { "type": "Clock", "params": { "bpm": 15.0 } },
+
+    "chords":    { "type": "NotePattern", "params": {
+      "steps": 4, "beats_per_step": 8, "gate_length": 0.95, "velocity": 0.7, "octave": 4,
+      "root_0": 0,  "type_0": 5,
+      "root_1": 5,  "type_1": 6,
+      "root_2": 9,  "type_2": 1,
+      "root_3": 7,  "type_3": 4
+    }},
+
+    "pad":       { "type": "WavetableSynth", "params": {
+      "wavetable": 4, "position": 0.3, "amplitude": 0.25,
+      "attack": 0.8, "decay": 0.5, "sustain": 0.6, "release": 1.5,
+      "filter_type": 1, "filter_cutoff": 3000.0, "filter_resonance": 0.25,
+      "filter_attack": 0.5, "filter_decay": 1.0, "filter_sustain": 0.2, "filter_release": 1.0,
+      "filter_env_amount": 0.5,
+      "position_attack": 0.3, "position_decay": 2.0, "position_sustain": 0.0, "position_release": 1.0,
+      "position_env_amount": 0.6,
+      "unison_voices": 4, "unison_spread": 15.0, "unison_stereo": 0.8,
+      "stereo_spread": 0.7, "portamento": 80.0
+    }},
+
+    "lfo_pos":   { "type": "LFO", "params": { "frequency": 0.15, "amplitude": 0.3, "offset": 0.0 } },
+
+    "delay1":    { "type": "Delay",    "params": { "time": 0.375, "feedback": 0.45, "mix": 0.3 } },
+    "reverb1":   { "type": "Reverb",   "params": { "room_size": 0.8, "damping": 0.4, "mix": 0.4 } },
+    "glitch":    { "type": "Glitch",   "params": {
+      "repeat_chance": 0.12, "reverse_chance": 0.15, "stutter_chance": 0.1,
+      "scratch_chance": 0.08, "tape_chance": 0.08, "shift_chance": 0.1, "mix": 1.0
+    }},
+    "master":    { "type": "Gain",     "params": { "gain": 0.85 } },
+    "out":       { "type": "audio_out", "params": {} },
+
+    "title":      { "type": "Text", "params": { "text": "DRIFT", "size": 0.5, "r": 0.7, "g": 0.8, "b": 0.9 } },
+    "fb":         { "type": "Feedback", "params": { "decay": 0.92, "mix": 0.6, "zoom": 1.015, "rotate": 0.3 } },
+    "vis_glitch": { "type": "Visual Glitch", "params": { "shift_chance": 0.15, "scan_chance": 0.1, "static_chance": 0.05, "intensity": 0.5, "duration": 0.3, "mix": 1.0 } },
+    "bloom1":     { "type": "Bloom", "params": { "threshold": 0.3, "intensity": 0.4 } },
+    "vout":       { "type": "video_out", "params": {} }
+  },
+  "connections": [
+    { "from": "clock/beat_phase",      "to": "chords/beat_phase" },
+    { "from": "chords/notes",          "to": "pad/notes" },
+    { "from": "chords/velocities",     "to": "pad/velocities" },
+    { "from": "chords/gates",          "to": "pad/gates" },
+
+    { "from": "clock_2bar/beat_phase", "to": "lfo_pos/phase" },
+    { "from": "lfo_pos/value",         "to": "pad/position_mod" },
+
+    { "from": "pad/output_left",       "to": "delay1/input" },
+    { "from": "delay1/output",         "to": "reverb1/input" },
+
+    { "from": "clock/beat_phase",      "to": "glitch/phase" },
+    { "from": "reverb1/output",        "to": "glitch/input" },
+
+    { "from": "glitch/output",         "to": "master/input" },
+    { "from": "master/output",         "to": "out/input" },
+
+    { "from": "title/texture",         "to": "fb/input" },
+    { "from": "fb/texture",             "to": "vis_glitch/input" },
+    { "from": "vis_glitch/texture",    "to": "bloom1/input" },
+    { "from": "bloom1/texture",        "to": "vout/input" },
+    { "from": "clock/beat_phase",      "to": "vis_glitch/phase" }
+  ]
+}
