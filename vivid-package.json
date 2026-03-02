@@ -1,0 +1,16 @@
+{
+  "name": "vivid-glitch",
+  "version": "1.0.0",
+  "description": "Creative audio glitch effects — stutter, tape stop, beat repeat, scratch, and more",
+  "author": "Jeff",
+  "operators": [
+    "audio/stutter",
+    "audio/tape_stop",
+    "audio/beat_repeat",
+    "audio/reverse",
+    "audio/scratch",
+    "audio/stretch",
+    "audio/freq_shift",
+    "audio/glitch"
+  ]
+}
