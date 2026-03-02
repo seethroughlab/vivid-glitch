@@ -1,7 +1,7 @@
 {
   "name": "vivid-glitch",
-  "version": "1.0.0",
-  "description": "Creative audio glitch effects — stutter, tape stop, beat repeat, scratch, and more",
+  "version": "2.0.0",
+  "description": "Creative audio and visual glitch effects — stutter, tape stop, datamosh, VHS, and more",
   "author": "Jeff",
   "operators": [
     "audio/stutter",
@@ -12,5 +12,16 @@
     "audio/stretch",
     "audio/freq_shift",
     "audio/glitch"
+  ],
+  "gpu_operators": [
+    "gpu/jpeg_glitch",
+    "gpu/pixel_sort",
+    "gpu/block_displacement",
+    "gpu/scan_distort",
+    "gpu/channel_shift",
+    "gpu/vhs",
+    "gpu/static_glitch",
+    "gpu/datamosh",
+    "gpu/visual_glitch"
   ]
 }
