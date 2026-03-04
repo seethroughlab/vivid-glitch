@@ -90,6 +90,12 @@ foreach(_op jpeg_glitch pixel_sort block_displacement scan_distort channel_shift
     target_include_directories(${_op} PRIVATE ${CMAKE_SOURCE_DIR}/operators/gpu/glitch_common)
 endforeach()
 
+# --- Operators meta-target (for smoke CI: builds only dylibs) ---
+add_custom_target(operators DEPENDS
+    stutter tape_stop beat_repeat reverse scratch stretch freq_shift glitch
+    jpeg_glitch pixel_sort block_displacement scan_distort channel_shift
+    vhs static_glitch datamosh visual_glitch)
+
 # --- Copy demo graphs to build directory ---
 file(GLOB _GLITCH_GRAPHS graphs/*.json)
 foreach(g ${_GLITCH_GRAPHS})
