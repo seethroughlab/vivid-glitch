@@ -14,6 +14,9 @@ if(NOT DEFINED VIVID_BUILD_DIR)
     set(VIVID_BUILD_DIR "${VIVID_SRC_DIR}/build")
 endif()
 
+# Reserved for future package tests; keep OFF for install/rebuild speed.
+option(VIVID_PACKAGE_BUILD_TESTS "Build vivid-glitch package tests" OFF)
+
 # --- Operator API (header-only) ---
 add_library(vivid_operator_api INTERFACE)
 target_include_directories(vivid_operator_api INTERFACE
