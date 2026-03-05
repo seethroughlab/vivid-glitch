@@ -1,6 +1,7 @@
 {
   "name": "vivid-glitch",
   "version": "2.0.0",
+  "vivid_core": ">=0.1.0 <2.0.0",
   "description": "Creative audio and visual glitch effects — stutter, tape stop, datamosh, VHS, and more",
   "author": "Jeff",
   "operators": [
