@@ -2,6 +2,11 @@
 
 Creative audio and visual glitch effects for [Vivid](https://github.com/vivid-project/vivid).
 
+## Preview
+
+![vivid-glitch preview](docs/images/preview.png)
+
+
 ## Audio Operators
 
 | Operator | Description |
