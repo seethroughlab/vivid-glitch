@@ -24,6 +24,78 @@ inline float crossfade_coeff(uint32_t pos, uint32_t length, uint32_t fade_sample
 }
 
 // ---------------------------------------------------------------------------
+// Tempo-locked rate helpers
+// ---------------------------------------------------------------------------
+enum class RateDivision : int {
+    Whole = 0,      // 1/1
+    Half,           // 1/2
+    Quarter,        // 1/4
+    Eighth,         // 1/8
+    Sixteenth,      // 1/16
+    ThirtySecond,   // 1/32
+    QuarterTriplet, // 1/4T
+    EighthTriplet,  // 1/8T
+    QuarterDotted,  // 1/4D
+    EighthDotted    // 1/8D
+};
+
+inline float division_multiplier(RateDivision div) {
+    switch (div) {
+        case RateDivision::Whole:          return 1.0f;
+        case RateDivision::Half:           return 0.5f;
+        case RateDivision::Quarter:        return 0.25f;
+        case RateDivision::Eighth:         return 0.125f;
+        case RateDivision::Sixteenth:      return 0.0625f;
+        case RateDivision::ThirtySecond:   return 0.03125f;
+        case RateDivision::QuarterTriplet: return 1.0f / 3.0f;
+        case RateDivision::EighthTriplet:  return 1.0f / 6.0f;
+        case RateDivision::QuarterDotted:  return 0.375f;
+        case RateDivision::EighthDotted:   return 0.1875f;
+        default:                           return 0.25f;
+    }
+}
+
+inline RateDivision division_from_index(int index) {
+    if (index < static_cast<int>(RateDivision::Whole))
+        return RateDivision::Whole;
+    if (index > static_cast<int>(RateDivision::EighthDotted))
+        return RateDivision::EighthDotted;
+    return static_cast<RateDivision>(index);
+}
+
+struct TempoTracker {
+    uint32_t samples_since_trigger = 0;
+    uint32_t trigger_period_samples = 0;
+
+    void update_block(uint32_t block_frames, bool trigger_now) {
+        if (trigger_now) {
+            if (samples_since_trigger > 0) trigger_period_samples = samples_since_trigger;
+            samples_since_trigger = 0;
+        }
+        samples_since_trigger += block_frames;
+    }
+
+    bool has_period() const { return trigger_period_samples > 0; }
+};
+
+inline uint32_t resolve_tempo_locked_samples(bool sync_enabled,
+                                             float fallback_seconds,
+                                             int division_index,
+                                             const TempoTracker& tracker,
+                                             uint32_t sample_rate,
+                                             uint32_t min_samples = 1,
+                                             uint32_t max_samples = 0) {
+    uint32_t samples = static_cast<uint32_t>(fallback_seconds * sample_rate);
+    if (sync_enabled && tracker.has_period()) {
+        float mul = division_multiplier(division_from_index(division_index));
+        samples = static_cast<uint32_t>(static_cast<float>(tracker.trigger_period_samples) * mul);
+    }
+    if (samples < min_samples) samples = min_samples;
+    if (max_samples > 0 && samples > max_samples) samples = max_samples;
+    return samples;
+}
+
+// ---------------------------------------------------------------------------
 // CircularBuffer: mono ring buffer with lazy allocation
 //
 // write() records input continuously.

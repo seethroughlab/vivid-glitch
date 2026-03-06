@@ -17,12 +17,15 @@ struct BeatRepeat : vivid::OperatorBase {
     vivid::Param<float> phase {"phase",  0.0f,  0.0f,  1.0f};
     vivid::Param<float> chance{"chance", 0.5f,  0.0f,  1.0f};
     vivid::Param<float> size  {"size",   0.15f, 0.02f, 1.0f};
+    vivid::Param<int>   sync  {"sync",   0, {"Off","On"}};
+    vivid::Param<int>   division {"division", 3, {"1/1","1/2","1/4","1/8","1/16","1/32","1/4T","1/8T","1/4D","1/8D"}};
     vivid::Param<int>   count {"count",  4,     1,     16};
     vivid::Param<float> decay {"decay",  0.1f,  0.0f,  1.0f};
     vivid::Param<float> mix   {"mix",    1.0f,  0.0f,  1.0f};
 
     glitch::CircularBuffer buf_;
     glitch::WhiteNoise     rng_;
+    glitch::TempoTracker   tempo_;
     float prev_phase_ = 0.0f;
 
     enum State { Passthrough, Repeating };
@@ -39,6 +42,8 @@ struct BeatRepeat : vivid::OperatorBase {
         out.push_back(&phase);
         out.push_back(&chance);
         out.push_back(&size);
+        out.push_back(&sync);
+        out.push_back(&division);
         out.push_back(&count);
         out.push_back(&decay);
         out.push_back(&mix);
@@ -63,10 +68,13 @@ struct BeatRepeat : vivid::OperatorBase {
         float wet = mix.value;
         float dry = 1.0f - wet;
         int   cnt = count.int_value();
-        uint32_t slice_samples = static_cast<uint32_t>(size.value * audio->sample_rate);
-        if (slice_samples < 1) slice_samples = 1;
+        bool trigger_now = glitch::detect_trigger(cur_phase, prev_phase_);
+        tempo_.update_block(frames, trigger_now);
+        uint32_t slice_samples = glitch::resolve_tempo_locked_samples(
+            sync.int_value() > 0, size.value, division.int_value(), tempo_,
+            audio->sample_rate, 1, buf_.size > 0 ? (buf_.size - 1) : 0);
 
-        if (glitch::detect_trigger(cur_phase, prev_phase_) && state_ == Passthrough) {
+        if (trigger_now && state_ == Passthrough) {
             if (rng_.next_unipolar() < chance.value) {
                 state_        = Repeating;
                 slice_len_    = slice_samples;

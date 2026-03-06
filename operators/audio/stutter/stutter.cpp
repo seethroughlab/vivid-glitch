@@ -18,6 +18,8 @@ struct Stutter : vivid::OperatorBase {
     vivid::Param<float> phase     {"phase",      0.0f, 0.0f,  1.0f};
     vivid::Param<float> chance    {"chance",     0.5f, 0.0f,  1.0f};
     vivid::Param<float> size      {"size",       0.1f, 0.02f, 1.0f};
+    vivid::Param<int>   sync      {"sync",       0, {"Off","On"}};
+    vivid::Param<int>   division  {"division",   3, {"1/1","1/2","1/4","1/8","1/16","1/32","1/4T","1/8T","1/4D","1/8D"}};
     vivid::Param<int>   count     {"count",      8,    1,     32};
     vivid::Param<int>   envelope  {"envelope",   0, {"Decay","Build","Flat","Triangle"}};
     vivid::Param<float> env_amount{"env_amount", 0.5f, 0.0f,  1.0f};
@@ -25,6 +27,7 @@ struct Stutter : vivid::OperatorBase {
 
     glitch::CircularBuffer buf_;
     glitch::WhiteNoise     rng_;
+    glitch::TempoTracker   tempo_;
     float prev_phase_ = 0.0f;
 
     enum State { Passthrough, Stuttering };
@@ -39,6 +42,8 @@ struct Stutter : vivid::OperatorBase {
         out.push_back(&phase);
         out.push_back(&chance);
         out.push_back(&size);
+        out.push_back(&sync);
+        out.push_back(&division);
         out.push_back(&count);
         out.push_back(&envelope);
         out.push_back(&env_amount);
@@ -85,11 +90,14 @@ struct Stutter : vivid::OperatorBase {
         int   cnt = count.int_value();
         int   env_shape = envelope.int_value();
         float env_amt = env_amount.value;
-        uint32_t slice_samples = static_cast<uint32_t>(size.value * audio->sample_rate);
-        if (slice_samples < 1) slice_samples = 1;
+        bool trigger_now = glitch::detect_trigger(cur_phase, prev_phase_);
+        tempo_.update_block(frames, trigger_now);
+        uint32_t slice_samples = glitch::resolve_tempo_locked_samples(
+            sync.int_value() > 0, size.value, division.int_value(), tempo_,
+            audio->sample_rate, 1, buf_.size > 0 ? (buf_.size - 1) : 0);
 
         // Trigger check at block boundary
-        if (glitch::detect_trigger(cur_phase, prev_phase_) && state_ == Passthrough) {
+        if (trigger_now && state_ == Passthrough) {
             if (rng_.next_unipolar() < chance.value) {
                 state_       = Stuttering;
                 slice_len_   = slice_samples;
