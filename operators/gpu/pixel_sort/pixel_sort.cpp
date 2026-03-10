@@ -3,7 +3,6 @@
 
 struct PixelSort : vivid::WgslFilterBase {
     static constexpr const char* kName   = "Pixel Sort";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = true;
 
     vivid::Param<float> threshold_lo {"threshold_lo", 0.2f, 0.0f,   1.0f};

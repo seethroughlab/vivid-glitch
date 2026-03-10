@@ -176,9 +176,8 @@ struct VisualGlitchUniforms {
 // Visual Glitch Operator
 // =============================================================================
 
-struct VisualGlitch : vivid::OperatorBase {
+struct VisualGlitch : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "Visual Glitch";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = true;
 
     vivid::Param<float> phase          {"phase",           0.0f, 0.0f, 1.0f};
@@ -210,12 +209,9 @@ struct VisualGlitch : vivid::OperatorBase {
         out.push_back({"texture", VIVID_PORT_GPU_TEXTURE, VIVID_PORT_OUTPUT});
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         if (!pipeline_) {
-            if (!lazy_init(gpu)) return;
+            if (!lazy_init(ctx)) return;
         }
 
         // --- Phase trigger detection ---
@@ -241,20 +237,20 @@ struct VisualGlitch : vivid::OperatorBase {
 
         // --- Get input texture ---
         WGPUTextureView input_tex = nullptr;
-        if (gpu->input_texture_views && gpu->input_texture_count >= 1)
-            input_tex = gpu->input_texture_views[0];
-        if (!input_tex && !fallback_view_) create_fallback(gpu);
+        if (ctx->input_texture_views && ctx->input_texture_count >= 1)
+            input_tex = ctx->input_texture_views[0];
+        if (!input_tex && !fallback_view_) create_fallback(ctx);
         if (!input_tex) input_tex = fallback_view_;
 
         if (input_tex != cached_input_tex_) {
-            rebuild_bind_group(gpu, input_tex);
+            rebuild_bind_group(ctx, input_tex);
             cached_input_tex_ = input_tex;
         }
 
         // --- Write uniforms ---
         VisualGlitchUniforms u{};
-        u.resolution[0] = static_cast<float>(gpu->output_width);
-        u.resolution[1] = static_cast<float>(gpu->output_height);
+        u.resolution[0] = static_cast<float>(ctx->output_width);
+        u.resolution[1] = static_cast<float>(ctx->output_height);
         u.time          = static_cast<float>(ctx->time);
         u.frame         = static_cast<uint32_t>(ctx->frame);
         u.active_effect = active_effect_f;
@@ -265,10 +261,10 @@ struct VisualGlitch : vivid::OperatorBase {
         u.seed2         = seed2_;
         u.seed3         = seed3_;
         u.seed4         = seed4_;
-        wgpuQueueWriteBuffer(gpu->queue, uniform_buf_, 0, &u, sizeof(u));
+        wgpuQueueWriteBuffer(ctx->queue, uniform_buf_, 0, &u, sizeof(u));
 
-        vivid::gpu::run_pass(gpu->command_encoder, pipeline_, bind_group_,
-                             gpu->output_texture_view, "Visual Glitch");
+        vivid::gpu::run_pass(ctx->command_encoder, pipeline_, bind_group_,
+                             ctx->output_texture_view, "Visual Glitch");
     }
 
     ~VisualGlitch() override {
@@ -338,7 +334,7 @@ private:
     }
 
     // -------------------------------------------------------------------------
-    void create_fallback(VividGpuState* gpu) {
+    void create_fallback(const VividGpuContext* gpu) {
         WGPUTextureDescriptor td{};
         td.label         = vivid_sv("VisualGlitch Fallback");
         td.size          = { 1, 1, 1 };
@@ -369,7 +365,7 @@ private:
     }
 
     // -------------------------------------------------------------------------
-    void rebuild_bind_group(VividGpuState* gpu, WGPUTextureView input_tex) {
+    void rebuild_bind_group(const VividGpuContext* gpu, WGPUTextureView input_tex) {
         vivid::gpu::release(bind_group_);
 
         WGPUBindGroupEntry entries[3]{};
@@ -390,7 +386,7 @@ private:
     }
 
     // -------------------------------------------------------------------------
-    bool lazy_init(VividGpuState* gpu) {
+    bool lazy_init(const VividGpuContext* gpu) {
         shader_ = vivid::gpu::create_shader(gpu->device, kVisualGlitchFragment, "VisualGlitch Shader");
         if (!shader_) return false;
 

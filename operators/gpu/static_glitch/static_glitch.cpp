@@ -3,7 +3,6 @@
 
 struct StaticGlitch : vivid::WgslFilterBase {
     static constexpr const char* kName   = "Static Glitch";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = true;
 
     vivid::Param<float> amount       {"amount",        0.5f, 0.0f,   1.0f};

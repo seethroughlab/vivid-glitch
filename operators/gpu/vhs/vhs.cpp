@@ -3,7 +3,6 @@
 
 struct VHS : vivid::WgslFilterBase {
     static constexpr const char* kName   = "VHS";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = true;
 
     vivid::Param<float> tracking     {"tracking",      0.3f, 0.0f, 1.0f};

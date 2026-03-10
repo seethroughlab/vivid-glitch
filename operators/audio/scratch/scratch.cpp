@@ -11,9 +11,8 @@
 // with configurable motion patterns (back-forth, forward, backward, random).
 // ---------------------------------------------------------------------------
 
-struct Scratch : vivid::OperatorBase {
+struct Scratch : vivid::AudioOperatorBase {
     static constexpr const char* kName   = "Scratch";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_AUDIO;
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<float> phase     {"phase",      0.0f,   0.0f,   1.0f};
@@ -68,21 +67,18 @@ struct Scratch : vivid::OperatorBase {
         return base;
     }
 
-    void process(const VividProcessContext* ctx) override {
-        auto* audio = vivid_audio(ctx);
-        if (!audio) return;
+    void process_audio(const VividAudioContext* ctx) override {
+        buf_.init(ctx->sample_rate);
 
-        buf_.init(audio->sample_rate);
-
-        float* in  = audio->input_buffers[0];
-        float* out = audio->output_buffers[0];
-        uint32_t frames = audio->buffer_size;
+        float* in  = ctx->input_buffers[0];
+        float* out = ctx->output_buffers[0];
+        uint32_t frames = ctx->buffer_size;
 
         float cur_phase = phase.value;
         float wet = mix.value;
         float dry = 1.0f - wet;
         int   cur_motion = motion.int_value();
-        uint32_t scratch_samples = static_cast<uint32_t>(size.value * audio->sample_rate);
+        uint32_t scratch_samples = static_cast<uint32_t>(size.value * ctx->sample_rate);
         if (scratch_samples < 1) scratch_samples = 1;
 
         if (glitch::detect_trigger(cur_phase, prev_phase_) && state_ == Passthrough) {

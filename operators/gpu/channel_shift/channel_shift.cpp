@@ -3,7 +3,6 @@
 
 struct ChannelShift : vivid::WgslFilterBase {
     static constexpr const char* kName   = "Channel Shift";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = true;
 
     vivid::Param<float> r_offset_x    {"r_offset_x",     0.02f, -0.5f, 0.5f};

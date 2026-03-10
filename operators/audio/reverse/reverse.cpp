@@ -9,9 +9,8 @@
 // crossfade at start/end for click-free transitions.
 // ---------------------------------------------------------------------------
 
-struct Reverse : vivid::OperatorBase {
+struct Reverse : vivid::AudioOperatorBase {
     static constexpr const char* kName   = "Reverse";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_AUDIO;
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<float> phase {"phase",  0.0f,  0.0f, 1.0f};
@@ -64,15 +63,12 @@ struct Reverse : vivid::OperatorBase {
         out.push_back({"output", VIVID_PORT_AUDIO_FLOAT, VIVID_PORT_OUTPUT});
     }
 
-    void process(const VividProcessContext* ctx) override {
-        auto* audio = vivid_audio(ctx);
-        if (!audio) return;
+    void process_audio(const VividAudioContext* ctx) override {
+        buf_.init(ctx->sample_rate);
 
-        buf_.init(audio->sample_rate);
-
-        float* in  = audio->input_buffers[0];
-        float* out = audio->output_buffers[0];
-        uint32_t frames = audio->buffer_size;
+        float* in  = ctx->input_buffers[0];
+        float* out = ctx->output_buffers[0];
+        uint32_t frames = ctx->buffer_size;
 
         float cur_phase = phase.value;
         float wet = mix.value;
@@ -81,7 +77,7 @@ struct Reverse : vivid::OperatorBase {
         tempo_.update_block(frames, trigger_now);
         uint32_t slice_samples = glitch::resolve_tempo_locked_samples(
             sync.int_value() > 0, size.value, division.int_value(), tempo_,
-            audio->sample_rate, 1, buf_.size > 0 ? (buf_.size - 1) : 0);
+            ctx->sample_rate, 1, buf_.size > 0 ? (buf_.size - 1) : 0);
 
         if (trigger_now && state_ == Passthrough) {
             if (rng_.next_unipolar() < chance.value) {
@@ -94,7 +90,7 @@ struct Reverse : vivid::OperatorBase {
         }
 
         uint32_t transition_samples = static_cast<uint32_t>(
-            transition_ms.value * 0.001f * static_cast<float>(audio->sample_rate));
+            transition_ms.value * 0.001f * static_cast<float>(ctx->sample_rate));
 
         for (uint32_t i = 0; i < frames; i++) {
             buf_.write(in[i]);

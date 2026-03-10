@@ -3,7 +3,6 @@
 
 struct ScanDistort : vivid::WgslFilterBase {
     static constexpr const char* kName   = "Scan Distort";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = true;
 
     vivid::Param<float> amount      {"amount",      0.05f, 0.0f,   0.5f};

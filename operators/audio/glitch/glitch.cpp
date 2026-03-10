@@ -12,9 +12,8 @@
 // Runs selected effect to completion before allowing next trigger.
 // ---------------------------------------------------------------------------
 
-struct Glitch : vivid::OperatorBase {
+struct Glitch : vivid::AudioOperatorBase {
     static constexpr const char* kName   = "Glitch";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_AUDIO;
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<float> phase         {"phase",          0.0f, 0.0f, 1.0f};
@@ -248,16 +247,13 @@ struct Glitch : vivid::OperatorBase {
         }
     }
 
-    void process(const VividProcessContext* ctx) override {
-        auto* audio = vivid_audio(ctx);
-        if (!audio) return;
+    void process_audio(const VividAudioContext* ctx) override {
+        buf_.init(ctx->sample_rate);
 
-        buf_.init(audio->sample_rate);
-
-        float* in  = audio->input_buffers[0];
-        float* out = audio->output_buffers[0];
-        uint32_t frames = audio->buffer_size;
-        uint32_t sr = audio->sample_rate;
+        float* in  = ctx->input_buffers[0];
+        float* out = ctx->output_buffers[0];
+        uint32_t frames = ctx->buffer_size;
+        uint32_t sr = ctx->sample_rate;
 
         float cur_phase = phase.value;
         float wet = mix.value;

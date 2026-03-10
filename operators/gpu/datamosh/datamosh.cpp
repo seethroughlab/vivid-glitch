@@ -200,9 +200,8 @@ struct CompositeUniforms {
 // Datamosh Operator
 // =============================================================================
 
-struct Datamosh : vivid::OperatorBase {
+struct Datamosh : vivid::GpuOperatorBase {
     static constexpr const char* kName   = "Datamosh";
-    static constexpr VividDomain kDomain = VIVID_DOMAIN_GPU;
     static constexpr bool kTimeDependent = true;
 
     vivid::Param<float> amount          {"amount",          0.5f, 0.0f, 1.0f};
@@ -230,12 +229,9 @@ struct Datamosh : vivid::OperatorBase {
         out.push_back({"texture", VIVID_PORT_GPU_TEXTURE, VIVID_PORT_OUTPUT});
     }
 
-    void process(const VividProcessContext* ctx) override {
-        VividGpuState* gpu = vivid_gpu(ctx);
-        if (!gpu) return;
-
+    void process_gpu(const VividGpuContext* ctx) override {
         if (!motion_pipeline_) {
-            if (!lazy_init(gpu)) {
+            if (!lazy_init(ctx)) {
                 std::fprintf(stderr, "[datamosh] lazy_init FAILED\n");
                 return;
             }
@@ -243,21 +239,21 @@ struct Datamosh : vivid::OperatorBase {
 
         // Get input texture
         WGPUTextureView input_tex = nullptr;
-        if (gpu->input_texture_views && gpu->input_texture_count >= 1)
-            input_tex = gpu->input_texture_views[0];
-        if (!input_tex && !fallback_view_) create_fallback(gpu);
+        if (ctx->input_texture_views && ctx->input_texture_count >= 1)
+            input_tex = ctx->input_texture_views[0];
+        if (!input_tex && !fallback_view_) create_fallback(ctx);
         if (!input_tex) input_tex = fallback_view_;
 
         // Recreate persistent textures on resolution change
-        if (gpu->output_width != cached_width_ || gpu->output_height != cached_height_) {
-            recreate_textures(gpu);
-            cached_width_  = gpu->output_width;
-            cached_height_ = gpu->output_height;
+        if (ctx->output_width != cached_width_ || ctx->output_height != cached_height_) {
+            recreate_textures(ctx);
+            cached_width_  = ctx->output_width;
+            cached_height_ = ctx->output_height;
         }
 
         // Rebuild bind groups if input changed
         if (input_tex != cached_input_tex_ || bind_groups_dirty_) {
-            rebuild_bind_groups(gpu, input_tex);
+            rebuild_bind_groups(ctx, input_tex);
             cached_input_tex_ = input_tex;
             bind_groups_dirty_ = false;
         }
@@ -265,23 +261,23 @@ struct Datamosh : vivid::OperatorBase {
         // --- Pass 1: Motion estimation ---
         {
             MotionUniforms mu{};
-            mu.resolution[0] = static_cast<float>(gpu->output_width);
-            mu.resolution[1] = static_cast<float>(gpu->output_height);
+            mu.resolution[0] = static_cast<float>(ctx->output_width);
+            mu.resolution[1] = static_cast<float>(ctx->output_height);
             mu.time = static_cast<float>(ctx->time);
             mu.frame = static_cast<uint32_t>(ctx->frame);
             mu.amount = amount.value;
             mu.quantize_motion = quantize_motion.value;
-            wgpuQueueWriteBuffer(gpu->queue, motion_uniform_buf_, 0, &mu, sizeof(mu));
+            wgpuQueueWriteBuffer(ctx->queue, motion_uniform_buf_, 0, &mu, sizeof(mu));
 
-            vivid::gpu::run_pass(gpu->command_encoder, motion_pipeline_, motion_bg_,
+            vivid::gpu::run_pass(ctx->command_encoder, motion_pipeline_, motion_bg_,
                                  motion_view_, "Datamosh Motion");
         }
 
         // --- Pass 2: Composite ---
         {
             CompositeUniforms cu{};
-            cu.resolution[0] = static_cast<float>(gpu->output_width);
-            cu.resolution[1] = static_cast<float>(gpu->output_height);
+            cu.resolution[0] = static_cast<float>(ctx->output_width);
+            cu.resolution[1] = static_cast<float>(ctx->output_height);
             cu.time = static_cast<float>(ctx->time);
             cu.frame = static_cast<uint32_t>(ctx->frame);
             cu.amount = amount.value;
@@ -291,20 +287,20 @@ struct Datamosh : vivid::OperatorBase {
             cu.reset_phase = reset_phase.value;
             cu.color_bleed = color_bleed.value;
             cu.mix_val = mix.value;
-            wgpuQueueWriteBuffer(gpu->queue, composite_uniform_buf_, 0, &cu, sizeof(cu));
+            wgpuQueueWriteBuffer(ctx->queue, composite_uniform_buf_, 0, &cu, sizeof(cu));
 
-            vivid::gpu::run_pass(gpu->command_encoder, composite_pipeline_, composite_bg_,
-                                 gpu->output_texture_view, "Datamosh Composite");
+            vivid::gpu::run_pass(ctx->command_encoder, composite_pipeline_, composite_bg_,
+                                 ctx->output_texture_view, "Datamosh Composite");
         }
 
         // --- Copy output to prev_frame for next frame ---
         {
             WGPUTexelCopyTextureInfo src{};
-            src.texture = gpu->output_texture;
+            src.texture = ctx->output_texture;
             WGPUTexelCopyTextureInfo dst{};
             dst.texture = prev_tex_;
-            WGPUExtent3D size = { gpu->output_width, gpu->output_height, 1 };
-            wgpuCommandEncoderCopyTextureToTexture(gpu->command_encoder, &src, &dst, &size);
+            WGPUExtent3D size = { ctx->output_width, ctx->output_height, 1 };
+            wgpuCommandEncoderCopyTextureToTexture(ctx->command_encoder, &src, &dst, &size);
         }
     }
 
@@ -371,7 +367,7 @@ private:
     bool bind_groups_dirty_ = true;
 
     // -------------------------------------------------------------------------
-    void create_fallback(VividGpuState* gpu) {
+    void create_fallback(const VividGpuContext* gpu) {
         WGPUTextureDescriptor td{};
         td.label         = vivid_sv("Datamosh Fallback");
         td.size          = { 1, 1, 1 };
@@ -402,7 +398,7 @@ private:
     }
 
     // -------------------------------------------------------------------------
-    WGPUTexture create_persistent_texture(VividGpuState* gpu, const char* label,
+    WGPUTexture create_persistent_texture(const VividGpuContext* gpu, const char* label,
                                            WGPUTextureFormat format) {
         WGPUTextureDescriptor td{};
         td.label         = vivid_sv(label);
@@ -428,7 +424,7 @@ private:
     }
 
     // -------------------------------------------------------------------------
-    void recreate_textures(VividGpuState* gpu) {
+    void recreate_textures(const VividGpuContext* gpu) {
         vivid::gpu::release(prev_tex_);
         vivid::gpu::release(prev_view_);
         vivid::gpu::release(motion_tex_);
@@ -443,7 +439,7 @@ private:
     }
 
     // -------------------------------------------------------------------------
-    void rebuild_bind_groups(VividGpuState* gpu, WGPUTextureView input_tex) {
+    void rebuild_bind_groups(const VividGpuContext* gpu, WGPUTextureView input_tex) {
         vivid::gpu::release(motion_bg_);
         vivid::gpu::release(composite_bg_);
 
@@ -493,7 +489,7 @@ private:
     }
 
     // -------------------------------------------------------------------------
-    WGPUBindGroupLayout create_bind_layout(VividGpuState* gpu, uint32_t tex_count,
+    WGPUBindGroupLayout create_bind_layout(const VividGpuContext* gpu, uint32_t tex_count,
                                             uint32_t uniform_size, const char* label) {
         std::vector<WGPUBindGroupLayoutEntry> entries(2 + tex_count, WGPUBindGroupLayoutEntry{});
 
@@ -522,7 +518,7 @@ private:
     }
 
     // -------------------------------------------------------------------------
-    bool lazy_init(VividGpuState* gpu) {
+    bool lazy_init(const VividGpuContext* gpu) {
         // Compile shaders
         motion_shader_ = vivid::gpu::create_shader(gpu->device, kMotionFragment, "Datamosh Motion Shader");
         composite_shader_ = vivid::gpu::create_shader(gpu->device, kCompositeFragment, "Datamosh Composite Shader");
