@@ -4,6 +4,8 @@
   "vivid_core": ">=0.1.0 <2.0.0",
   "description": "Creative audio and visual glitch effects — stutter, tape stop, datamosh, VHS, and more",
   "author": "Jeff",
+  "category": "gpu",
+  "tags": ["gpu", "effects", "glitch"],
   "operators": [
     "audio/stutter",
     "audio/tape_stop",
