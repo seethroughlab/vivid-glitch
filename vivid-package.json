@@ -29,7 +29,12 @@
   ],
   "dependencies": {},
   "tests": {
-    "graphs": [],
-    "cpp": []
+    "graphs": [
+      "graphs/glitch_demo.json",
+      "graphs/av_glitch_demo.json"
+    ],
+    "cpp": [
+      "tests/cpp/test_rate_utils.cpp"
+    ]
   }
 }

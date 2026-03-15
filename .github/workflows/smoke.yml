@@ -51,10 +51,13 @@ jobs:
           fi
 
       - name: Configure package
-        run: cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_OSX_ARCHITECTURES=${{ env.VIVID_OSX_ARCH }} -DVIVID_SRC_DIR=${{ github.workspace }}/../vivid -DVIVID_BUILD_DIR=${{ github.workspace }}/../vivid/build
+        run: cmake -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo -DCMAKE_OSX_ARCHITECTURES=${{ env.VIVID_OSX_ARCH }} -DVIVID_SRC_DIR=${{ github.workspace }}/../vivid -DVIVID_BUILD_DIR=${{ github.workspace }}/../vivid/build -DVIVID_PACKAGE_BUILD_TESTS=ON
 
-      - name: Build operators
-        run: cmake --build build --target operators -j$(sysctl -n hw.logicalcpu)
+      - name: Build operators and package tests
+        run: cmake --build build --target operators test_rate_utils -j$(sysctl -n hw.logicalcpu)
+
+      - name: Run package tests
+        run: ctest --test-dir build --output-on-failure
 
       - name: Copy operators to vivid build dir
         run: cp build/*.dylib ${{ github.workspace }}/../vivid/build/

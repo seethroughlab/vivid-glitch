@@ -115,3 +115,14 @@ All 17 operators (8 audio + 9 GPU visual) compile and install successfully.
 ## License
 
 MIT
+
+
+## Validation
+
+Before pushing changes:
+
+1. Configure + build package operators.
+2. Run package tests.
+3. Run `vivid` link/rebuild/uninstall cycle against this package.
+4. Run `test_demo_graphs` against this package's `graphs/` directory.
+5. Treat graph smoke as load/coverage validation; GPU-heavy graphs may skip in headless CI.
