@@ -11,7 +11,7 @@
 // with configurable motion patterns (back-forth, forward, backward, random).
 // ---------------------------------------------------------------------------
 
-struct Scratch : vivid::AudioOperatorBase {
+struct Scratch : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Scratch";
     static constexpr bool kTimeDependent = false;
 

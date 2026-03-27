@@ -9,7 +9,7 @@
 // times with each repetition multiplied by (1-decay)^n.
 // ---------------------------------------------------------------------------
 
-struct BeatRepeat : vivid::AudioOperatorBase {
+struct BeatRepeat : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "BeatRepeat";
     static constexpr bool kTimeDependent = false;
 

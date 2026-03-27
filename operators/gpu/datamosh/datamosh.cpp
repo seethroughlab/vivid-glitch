@@ -200,7 +200,7 @@ struct CompositeUniforms {
 // Datamosh Operator
 // =============================================================================
 
-struct Datamosh : vivid::GpuOperatorBase {
+struct Datamosh : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Datamosh";
     static constexpr bool kTimeDependent = true;
 

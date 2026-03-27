@@ -176,7 +176,7 @@ struct VisualGlitchUniforms {
 // Visual Glitch Operator
 // =============================================================================
 
-struct VisualGlitch : vivid::GpuOperatorBase {
+struct VisualGlitch : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Visual Glitch";
     static constexpr bool kTimeDependent = true;
 

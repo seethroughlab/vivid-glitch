@@ -18,7 +18,7 @@
 static constexpr int kHilbertTaps = 31;
 static constexpr int kHilbertHalf = kHilbertTaps / 2; // 15
 
-struct FreqShift : vivid::AudioOperatorBase {
+struct FreqShift : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "FreqShift";
     static constexpr bool kTimeDependent = false;
 

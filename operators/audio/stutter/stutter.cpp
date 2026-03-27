@@ -10,7 +10,7 @@
 // applied across the repetitions (decay, build, flat, triangle).
 // ---------------------------------------------------------------------------
 
-struct Stutter : vivid::AudioOperatorBase {
+struct Stutter : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Stutter";
     static constexpr bool kTimeDependent = false;
 

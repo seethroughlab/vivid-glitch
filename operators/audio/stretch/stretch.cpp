@@ -12,7 +12,7 @@
 // pitch stays the same while duration changes.
 // ---------------------------------------------------------------------------
 
-struct Stretch : vivid::AudioOperatorBase {
+struct Stretch : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Stretch";
     static constexpr bool kTimeDependent = false;
 

@@ -12,7 +12,7 @@
 // Runs selected effect to completion before allowing next trigger.
 // ---------------------------------------------------------------------------
 
-struct Glitch : vivid::AudioOperatorBase {
+struct Glitch : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Glitch";
     static constexpr bool kTimeDependent = false;
 

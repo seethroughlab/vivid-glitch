@@ -9,7 +9,7 @@
 // crossfade at start/end for click-free transitions.
 // ---------------------------------------------------------------------------
 
-struct Reverse : vivid::AudioOperatorBase {
+struct Reverse : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Reverse";
     static constexpr bool kTimeDependent = false;
 

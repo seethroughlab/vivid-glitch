@@ -11,7 +11,7 @@
 // Stopped: 100ms silence gap.
 // ---------------------------------------------------------------------------
 
-struct TapeStop : vivid::AudioOperatorBase {
+struct TapeStop : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "TapeStop";
     static constexpr bool kTimeDependent = false;
 
