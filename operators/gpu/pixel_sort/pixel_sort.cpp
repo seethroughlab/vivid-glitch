@@ -1,6 +1,18 @@
 #include "operator_api/wgsl_filter.h"
 #include "../glitch_common/glitch_gpu.h"
 
+/**
+ * @brief Reorders image pixels into directional sort streaks.
+ *
+ * Pixel Sort uses luminance thresholds and directional passes to create stretched, smeared image
+ * regions reminiscent of offline glitch-processing workflows.
+ *
+ * @param threshold_lo Lower luminance threshold for sorting.
+ * @param threshold_hi Upper luminance threshold for sorting.
+ * @param direction Sort direction.
+ * @param reverse Reverses the sort direction.
+ * @param mix Dry/wet blend.
+ */
 struct PixelSort : vivid::WgslFilterBase {
     static constexpr const char* kName   = "Pixel Sort";
     static constexpr bool kTimeDependent = true;

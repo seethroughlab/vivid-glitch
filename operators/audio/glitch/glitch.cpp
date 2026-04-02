@@ -12,6 +12,19 @@
 // Runs selected effect to completion before allowing next trigger.
 // ---------------------------------------------------------------------------
 
+/**
+ * @brief Randomly combines multiple audio glitch processes in one meta-effect.
+ *
+ * Glitch acts as a higher-level performance effect, selecting from repeat, reverse, stutter,
+ * scratch, tape-stop, and frequency-shift behaviors based on weighted trigger chances.
+ *
+ * @param phase Beat phase used for sync and triggering.
+ * @param repeat_chance Probability of beat-repeat selection.
+ * @param stutter_chance Probability of stutter selection.
+ * @param tape_chance Probability of tape-stop selection.
+ * @param shift_chance Probability of frequency-shift selection.
+ * @param mix Dry/wet blend.
+ */
 struct Glitch : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Glitch";
     static constexpr bool kTimeDependent = false;

@@ -9,6 +9,19 @@
 // crossfade at start/end for click-free transitions.
 // ---------------------------------------------------------------------------
 
+/**
+ * @brief Plays short windows of the input backward with smooth transitions.
+ *
+ * Reverse captures slices of audio, flips them in time, and crossfades the boundaries so the
+ * effect lands rhythmically without harsh clicks.
+ *
+ * @param phase Beat phase used for sync and triggering.
+ * @param chance Probability of triggering reversal.
+ * @param size Size of the reversed slice.
+ * @param division Beat division used when sync is enabled.
+ * @param transition_ms Crossfade time around slice boundaries.
+ * @param mix Dry/wet blend.
+ */
 struct Reverse : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Reverse";
     static constexpr bool kTimeDependent = false;

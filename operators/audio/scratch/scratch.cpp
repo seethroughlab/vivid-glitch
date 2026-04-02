@@ -11,6 +11,19 @@
 // with configurable motion patterns (back-forth, forward, backward, random).
 // ---------------------------------------------------------------------------
 
+/**
+ * @brief Applies DJ-style varispeed scratching to short captured audio segments.
+ *
+ * Scratch replays slices of the input with controllable speed, randomized motion, and directional
+ * patterns to mimic turntable-style gestures.
+ *
+ * @param phase Beat phase used for sync and triggering.
+ * @param chance Probability of triggering a scratch gesture.
+ * @param size Size of the captured scratch slice.
+ * @param speed Base scratch speed.
+ * @param motion Scratch motion pattern.
+ * @param mix Dry/wet blend.
+ */
 struct Scratch : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Scratch";
     static constexpr bool kTimeDependent = false;

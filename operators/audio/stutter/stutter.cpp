@@ -10,6 +10,19 @@
 // applied across the repetitions (decay, build, flat, triangle).
 // ---------------------------------------------------------------------------
 
+/**
+ * @brief Repeats short slices of audio in tempo-synced bursts.
+ *
+ * Stutter captures a window of incoming audio, retriggers it for a configurable count, and shapes
+ * the repeated slices with envelope options for rhythmic glitch textures.
+ *
+ * @param phase Beat phase used for sync and triggering.
+ * @param chance Probability of triggering a stutter event.
+ * @param size Slice length for each repeated chunk.
+ * @param count Number of repeats per trigger.
+ * @param envelope Envelope shape applied across the repeats.
+ * @param mix Dry/wet blend.
+ */
 struct Stutter : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Stutter";
     static constexpr bool kTimeDependent = false;

@@ -1,6 +1,19 @@
 #include "operator_api/wgsl_filter.h"
 #include "../glitch_common/glitch_gpu.h"
 
+/**
+ * @brief Offsets and duplicates rectangular regions of the image.
+ *
+ * Block Displacement breaks the input into a grid, shifts selected blocks, and can duplicate them
+ * to create digital tearing and collage-like distortions.
+ *
+ * @param amount Overall displacement amount.
+ * @param grid_x Number of blocks across the X axis.
+ * @param grid_y Number of blocks across the Y axis.
+ * @param direction Direction of displacement.
+ * @param duplicate Amount of block duplication.
+ * @param mix Dry/wet blend.
+ */
 struct BlockDisplacement : vivid::WgslFilterBase {
     static constexpr const char* kName   = "Block Displacement";
     static constexpr bool kTimeDependent = true;

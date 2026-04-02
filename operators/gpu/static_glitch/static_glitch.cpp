@@ -1,6 +1,19 @@
 #include "operator_api/wgsl_filter.h"
 #include "../glitch_common/glitch_gpu.h"
 
+/**
+ * @brief Adds static, interference, and scanline instability to the image.
+ *
+ * Static Glitch blends snow, flicker, channel artifacts, and vertical-hold drift for a noisy TV
+ * aesthetic.
+ *
+ * @param amount Overall effect strength.
+ * @param density Density of the generated static.
+ * @param color_mode Chooses monochrome or colorized static.
+ * @param vertical_hold Strength of vertical-hold instability.
+ * @param interference Amount of analog-style interference.
+ * @param mix Dry/wet blend.
+ */
 struct StaticGlitch : vivid::WgslFilterBase {
     static constexpr const char* kName   = "Static Glitch";
     static constexpr bool kTimeDependent = true;

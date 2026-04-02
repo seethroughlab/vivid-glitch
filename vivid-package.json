@@ -2,10 +2,14 @@
   "name": "vivid-glitch",
   "version": "2.0.0",
   "vivid_core": ">=0.1.0 <2.0.0",
-  "description": "Creative audio and visual glitch effects — stutter, tape stop, datamosh, VHS, and more",
+  "description": "Creative audio and visual glitch effects \u2014 stutter, tape stop, datamosh, VHS, and more",
   "author": "Jeff",
   "category": "gpu",
-  "tags": ["gpu", "effects", "glitch"],
+  "tags": [
+    "gpu",
+    "effects",
+    "glitch"
+  ],
   "operators": [
     "audio/stutter",
     "audio/tape_stop",
@@ -36,5 +40,9 @@
     "cpp": [
       "tests/cpp/test_rate_utils.cpp"
     ]
+  },
+  "site_docs": {
+    "overview": "README.md",
+    "preview_image": "docs/images/preview.png"
   }
 }

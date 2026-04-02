@@ -9,6 +9,19 @@
 // times with each repetition multiplied by (1-decay)^n.
 // ---------------------------------------------------------------------------
 
+/**
+ * @brief Repeats captured audio slices with beat-aware timing and repeat decay.
+ *
+ * BeatRepeat grabs a segment of audio, loops it in sync with the beat grid, and can fade each
+ * repeat so the result stays rhythmic instead of washing out the source.
+ *
+ * @param phase Beat phase used for sync and triggering.
+ * @param chance Probability of triggering a repeat phrase.
+ * @param size Slice size relative to the beat grid.
+ * @param division Beat division used when sync is enabled.
+ * @param count Number of repeats.
+ * @param decay Per-repeat amplitude decay.
+ */
 struct BeatRepeat : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "BeatRepeat";
     static constexpr bool kTimeDependent = false;

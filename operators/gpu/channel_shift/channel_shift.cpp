@@ -1,6 +1,19 @@
 #include "operator_api/wgsl_filter.h"
 #include "../glitch_common/glitch_gpu.h"
 
+/**
+ * @brief Offsets color channels independently for chromatic glitching.
+ *
+ * Channel Shift separates RGB channels in different directions and can animate the offsets for a
+ * classic analog or databend-style color fringe.
+ *
+ * @param r_offset_x Horizontal offset applied to the red channel.
+ * @param g_offset_x Horizontal offset applied to the green channel.
+ * @param b_offset_x Horizontal offset applied to the blue channel.
+ * @param animate Enables animated channel motion.
+ * @param wrap Edge wrap mode.
+ * @param mix Dry/wet blend.
+ */
 struct ChannelShift : vivid::WgslFilterBase {
     static constexpr const char* kName   = "Channel Shift";
     static constexpr bool kTimeDependent = true;

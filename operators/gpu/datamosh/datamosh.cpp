@@ -200,6 +200,19 @@ struct CompositeUniforms {
 // Datamosh Operator
 // =============================================================================
 
+/**
+ * @brief Blends motion and frame persistence to simulate datamoshing.
+ *
+ * Datamosh holds onto previous frames, reuses motion-like displacement, and bleeds colors across
+ * frame boundaries to mimic corrupted inter-frame video codecs.
+ *
+ * @param amount Overall intensity of the effect.
+ * @param freeze Amount of frame freezing.
+ * @param displacement Motion-style displacement amount.
+ * @param color_bleed Strength of cross-channel smearing.
+ * @param reset_phase Beat phase used for resetting the held state.
+ * @param mix Dry/wet blend.
+ */
 struct Datamosh : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Datamosh";
     static constexpr bool kTimeDependent = true;

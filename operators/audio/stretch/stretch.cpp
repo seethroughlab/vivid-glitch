@@ -12,6 +12,19 @@
 // pitch stays the same while duration changes.
 // ---------------------------------------------------------------------------
 
+/**
+ * @brief Time-stretches incoming audio with granular replay.
+ *
+ * Stretch breaks audio into overlapping grains so it can slow down or speed up the apparent time
+ * flow while keeping pitch more stable than simple resampling.
+ *
+ * @param phase Beat phase used for sync and triggering.
+ * @param chance Probability of triggering a stretch event.
+ * @param factor Stretch ratio applied to the captured slice.
+ * @param grain_size Length of each grain.
+ * @param overlap Grain overlap amount.
+ * @param mix Dry/wet blend.
+ */
 struct Stretch : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Stretch";
     static constexpr bool kTimeDependent = false;

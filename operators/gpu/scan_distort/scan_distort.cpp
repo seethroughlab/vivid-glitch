@@ -1,6 +1,19 @@
 #include "operator_api/wgsl_filter.h"
 #include "../glitch_common/glitch_gpu.h"
 
+/**
+ * @brief Distorts scanlines with animated horizontal displacement.
+ *
+ * Scan Distort introduces per-line offsets using noise or periodic motion to evoke unstable video
+ * transmission and analog scanline drift.
+ *
+ * @param amount Strength of the scanline displacement.
+ * @param frequency Frequency of the scan pattern.
+ * @param speed Animation speed.
+ * @param mode Scan pattern source.
+ * @param band_count Number of active distortion bands.
+ * @param mix Dry/wet blend.
+ */
 struct ScanDistort : vivid::WgslFilterBase {
     static constexpr const char* kName   = "Scan Distort";
     static constexpr bool kTimeDependent = true;

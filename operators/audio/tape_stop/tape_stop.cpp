@@ -11,6 +11,19 @@
 // Stopped: 100ms silence gap.
 // ---------------------------------------------------------------------------
 
+/**
+ * @brief Emulates tape-style slowdowns and restarts on incoming audio.
+ *
+ * TapeStop ramps playback speed down or back up over a timed window, creating classic DJ stop
+ * and restart gestures without leaving the graph.
+ *
+ * @param phase Beat phase used for sync and triggering.
+ * @param chance Probability of triggering the effect.
+ * @param stop_time Time spent decelerating.
+ * @param start_time Time spent accelerating back up.
+ * @param mode Chooses stop-start, stop-only, or start-only behavior.
+ * @param mix Dry/wet blend.
+ */
 struct TapeStop : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "TapeStop";
     static constexpr bool kTimeDependent = false;

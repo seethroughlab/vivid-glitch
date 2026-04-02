@@ -18,6 +18,18 @@
 static constexpr int kHilbertTaps = 31;
 static constexpr int kHilbertHalf = kHilbertTaps / 2; // 15
 
+/**
+ * @brief Applies frequency shifting with optional modulation.
+ *
+ * FreqShift moves every spectral component by a fixed amount rather than preserving harmonic
+ * spacing, making it useful for metallic, alien, and sideband-heavy textures.
+ *
+ * @param phase Beat phase input for modulation timing.
+ * @param shift Amount of frequency shift in hertz.
+ * @param mod_depth Depth of shift modulation.
+ * @param mod_rate Modulation rate.
+ * @param mix Dry/wet blend.
+ */
 struct FreqShift : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "FreqShift";
     static constexpr bool kTimeDependent = false;

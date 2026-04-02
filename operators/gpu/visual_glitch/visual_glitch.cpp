@@ -176,6 +176,19 @@ struct VisualGlitchUniforms {
 // Visual Glitch Operator
 // =============================================================================
 
+/**
+ * @brief Randomly combines multiple visual glitch effects in one GPU meta-operator.
+ *
+ * Visual Glitch selects and blends channel shifts, block moves, scan distortion, static, and
+ * other effects using beat-timed trigger probabilities.
+ *
+ * @param phase Beat phase used for sync and triggering.
+ * @param shift_chance Probability of channel-shift selection.
+ * @param block_chance Probability of block-displacement selection.
+ * @param static_chance Probability of static-glitch selection.
+ * @param intensity Global effect intensity.
+ * @param mix Dry/wet blend.
+ */
 struct VisualGlitch : vivid::OperatorBase, vivid::GpuProcessable {
     static constexpr const char* kName   = "Visual Glitch";
     static constexpr bool kTimeDependent = true;

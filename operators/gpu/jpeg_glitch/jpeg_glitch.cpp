@@ -1,6 +1,18 @@
 #include "operator_api/wgsl_filter.h"
 #include "../glitch_common/glitch_gpu.h"
 
+/**
+ * @brief Simulates JPEG-style block corruption and color breakup.
+ *
+ * JPEG Glitch introduces block quantization artifacts, channel offsets, and corruption patterns to
+ * create compressed-image aesthetics without leaving the GPU chain.
+ *
+ * @param amount Overall strength of the effect.
+ * @param block_size Size of the simulated compression blocks.
+ * @param corruption Amount of corruption introduced per block.
+ * @param quantize Strength of color quantization.
+ * @param mix Dry/wet blend.
+ */
 struct JpegGlitch : vivid::WgslFilterBase {
     static constexpr const char* kName   = "JPEG Glitch";
     static constexpr bool kTimeDependent = true;

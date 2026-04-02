@@ -1,6 +1,19 @@
 #include "operator_api/wgsl_filter.h"
 #include "../glitch_common/glitch_gpu.h"
 
+/**
+ * @brief Simulates VHS-era tracking, bleed, wobble, and tape noise.
+ *
+ * VHS layers several analog-video artifacts together so the result feels like degraded tape
+ * playback rather than a single synthetic distortion.
+ *
+ * @param tracking Strength of tracking instability.
+ * @param color_bleed Amount of chroma smear.
+ * @param noise Tape noise level.
+ * @param wobble Horizontal wobble amount.
+ * @param speed Animation speed for the effect.
+ * @param mix Dry/wet blend.
+ */
 struct VHS : vivid::WgslFilterBase {
     static constexpr const char* kName   = "VHS";
     static constexpr bool kTimeDependent = true;
