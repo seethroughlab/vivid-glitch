@@ -1,5 +1,4 @@
 #include "operator_api/operator.h"
-#include "operator_api/audio_operator.h"
 #include "../glitch_common/glitch_dsp.h"
 
 // ---------------------------------------------------------------------------
@@ -63,8 +62,8 @@ struct Stutter : vivid::OperatorBase, vivid::AudioProcessable {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back({"input",  VIVID_PORT_AUDIO, VIVID_PORT_INPUT});
-        out.push_back({"output", VIVID_PORT_AUDIO, VIVID_PORT_OUTPUT});
+        out.push_back({"input",  VIVID_PORT_AUDIO_BUFFER, VIVID_PORT_INPUT});
+        out.push_back({"output", VIVID_PORT_AUDIO_BUFFER, VIVID_PORT_OUTPUT});
     }
 
     float envelope_gain(int rep, int total, int shape, float amount) const {

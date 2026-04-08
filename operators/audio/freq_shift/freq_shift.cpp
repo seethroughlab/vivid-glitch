@@ -1,5 +1,4 @@
 #include "operator_api/operator.h"
-#include "operator_api/audio_operator.h"
 #include "operator_api/audio_dsp.h"
 
 #include <cmath>
@@ -83,8 +82,8 @@ struct FreqShift : vivid::OperatorBase, vivid::AudioProcessable {
     }
 
     void collect_ports(std::vector<VividPortDescriptor>& out) override {
-        out.push_back({"input",  VIVID_PORT_AUDIO, VIVID_PORT_INPUT});
-        out.push_back({"output", VIVID_PORT_AUDIO, VIVID_PORT_OUTPUT});
+        out.push_back({"input",  VIVID_PORT_AUDIO_BUFFER, VIVID_PORT_INPUT});
+        out.push_back({"output", VIVID_PORT_AUDIO_BUFFER, VIVID_PORT_OUTPUT});
     }
 
     void process_audio(const VividAudioContext* ctx) override {
