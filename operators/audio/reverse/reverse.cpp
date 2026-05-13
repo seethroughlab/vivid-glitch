@@ -1,4 +1,5 @@
 #include "operator_api/operator.h"
+#include "operator_api/metronome_sync.h"
 #include "../glitch_common/glitch_dsp.h"
 
 // ---------------------------------------------------------------------------
@@ -25,10 +26,10 @@ struct Reverse : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Reverse";
     static constexpr bool kTimeDependent = false;
 
-    vivid::Param<float> phase {"phase",  0.0f,  0.0f, 1.0f};
-    vivid::Param<float> chance{"chance", 0.5f,  0.0f, 1.0f};
-    vivid::Param<float> size  {"size",   0.25f, 0.05f, 2.0f};
-    vivid::Param<int>   sync  {"sync",   0, {"Off","On"}};
+    vivid::Param<float> phase    {"phase",    0.0f,  0.0f, 1.0f};
+    vivid::Param<int>   clock    {"clock",    0, {"Free","External","Metronome"}};
+    vivid::Param<float> chance   {"chance",   0.5f,  0.0f, 1.0f};
+    vivid::Param<float> size     {"size",     0.25f, 0.05f, 2.0f};
     vivid::Param<int>   division {"division", 2, {"1/1","1/2","1/4","1/8","1/16","1/32","1/4T","1/8T","1/4D","1/8D"}};
     vivid::Param<float> transition_ms{"transition_ms", 6.0f, 0.0f, 40.0f};
     vivid::Param<float> mix   {"mix",    1.0f,  0.0f, 1.0f};
@@ -62,9 +63,9 @@ struct Reverse : vivid::OperatorBase, vivid::AudioProcessable {
 
     void collect_params(std::vector<vivid::ParamBase*>& out) override {
         out.push_back(&phase);
+        out.push_back(&clock);
         out.push_back(&chance);
         out.push_back(&size);
-        out.push_back(&sync);
         out.push_back(&division);
         out.push_back(&transition_ms);
         out.push_back(&mix);
@@ -82,14 +83,23 @@ struct Reverse : vivid::OperatorBase, vivid::AudioProcessable {
         float* out = ctx->output_buffers[0];
         uint32_t frames = ctx->buffer_size;
 
-        float cur_phase = phase.value;
+        int  clk = clock.int_value();
+        auto metro = vivid::metronome_transport(ctx);
+        float cur_phase = (clk == 2) ? metro.beat_phase : phase.value;
+
         float wet = mix.value;
         float dry = 1.0f - wet;
         bool trigger_now = glitch::detect_trigger(cur_phase, prev_phase_);
         tempo_.update_block(frames, trigger_now);
-        uint32_t slice_samples = glitch::resolve_tempo_locked_samples(
-            sync.int_value() > 0, size.value, division.int_value(), tempo_,
-            ctx->sample_rate, 1, buf_.size > 0 ? (buf_.size - 1) : 0);
+
+        uint32_t slice_samples;
+        if (clk == 2) {
+            slice_samples = glitch::samples_from_bpm(metro.bpm, division.int_value(), ctx->sample_rate);
+        } else {
+            slice_samples = glitch::resolve_tempo_locked_samples(
+                clk == 1, size.value, division.int_value(), tempo_,
+                ctx->sample_rate, 1, buf_.size > 0 ? buf_.size - 1 : 0);
+        }
 
         if (trigger_now && state_ == Passthrough) {
             if (rng_.next_unipolar() < chance.value) {

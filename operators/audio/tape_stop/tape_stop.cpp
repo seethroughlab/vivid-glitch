@@ -1,4 +1,5 @@
 #include "operator_api/operator.h"
+#include "operator_api/metronome_sync.h"
 #include "../glitch_common/glitch_dsp.h"
 
 // ---------------------------------------------------------------------------
@@ -28,6 +29,7 @@ struct TapeStop : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<float> phase     {"phase",      0.0f,  0.0f,  1.0f};
+    vivid::Param<int>   clock     {"clock",      0, {"External","Metronome"}};
     vivid::Param<float> chance    {"chance",     0.3f,  0.0f,  1.0f};
     vivid::Param<float> stop_time {"stop_time",  0.5f,  0.05f, 2.0f};
     vivid::Param<float> start_time{"start_time", 0.2f,  0.05f, 1.0f};
@@ -48,6 +50,7 @@ struct TapeStop : vivid::OperatorBase, vivid::AudioProcessable {
 
     void collect_params(std::vector<vivid::ParamBase*>& out) override {
         out.push_back(&phase);
+        out.push_back(&clock);
         out.push_back(&chance);
         out.push_back(&stop_time);
         out.push_back(&start_time);
@@ -68,7 +71,8 @@ struct TapeStop : vivid::OperatorBase, vivid::AudioProcessable {
         uint32_t frames = ctx->buffer_size;
         uint32_t sr = ctx->sample_rate;
 
-        float cur_phase = phase.value;
+        auto  metro = vivid::metronome_transport(ctx);
+        float cur_phase = (clock.int_value() == 1) ? metro.beat_phase : phase.value;
         float wet = mix.value;
         float dry = 1.0f - wet;
         int   cur_mode = mode.int_value();

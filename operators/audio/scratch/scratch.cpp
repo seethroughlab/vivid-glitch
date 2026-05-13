@@ -1,4 +1,5 @@
 #include "operator_api/operator.h"
+#include "operator_api/metronome_sync.h"
 #include "../glitch_common/glitch_dsp.h"
 
 #include <cmath>
@@ -28,6 +29,7 @@ struct Scratch : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr bool kTimeDependent = false;
 
     vivid::Param<float> phase     {"phase",      0.0f,   0.0f,   1.0f};
+    vivid::Param<int>   clock     {"clock",      0, {"External","Metronome"}};
     vivid::Param<float> chance    {"chance",     0.4f,   0.0f,   1.0f};
     vivid::Param<float> size      {"size",       0.3f,   0.05f,  2.0f};
     vivid::Param<float> speed     {"speed",      1.0f,   0.125f, 4.0f};
@@ -54,6 +56,7 @@ struct Scratch : vivid::OperatorBase, vivid::AudioProcessable {
 
     void collect_params(std::vector<vivid::ParamBase*>& out) override {
         out.push_back(&phase);
+        out.push_back(&clock);
         out.push_back(&chance);
         out.push_back(&size);
         out.push_back(&speed);
@@ -86,7 +89,8 @@ struct Scratch : vivid::OperatorBase, vivid::AudioProcessable {
         float* out = ctx->output_buffers[0];
         uint32_t frames = ctx->buffer_size;
 
-        float cur_phase = phase.value;
+        auto  metro = vivid::metronome_transport(ctx);
+        float cur_phase = (clock.int_value() == 1) ? metro.beat_phase : phase.value;
         float wet = mix.value;
         float dry = 1.0f - wet;
         int   cur_motion = motion.int_value();

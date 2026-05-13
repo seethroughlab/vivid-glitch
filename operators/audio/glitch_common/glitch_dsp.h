@@ -78,6 +78,15 @@ struct TempoTracker {
     bool has_period() const { return trigger_period_samples > 0; }
 };
 
+inline uint32_t samples_from_bpm(float bpm, int division_index, uint32_t sample_rate,
+                                  uint32_t min_samples = 1) {
+    if (bpm <= 0.0f) bpm = 120.0f;
+    float mul = division_multiplier(division_from_index(division_index));
+    float beat_seconds = 60.0f / bpm;
+    uint32_t s = static_cast<uint32_t>(beat_seconds * mul * sample_rate);
+    return s < min_samples ? min_samples : s;
+}
+
 inline uint32_t resolve_tempo_locked_samples(bool sync_enabled,
                                              float fallback_seconds,
                                              int division_index,
