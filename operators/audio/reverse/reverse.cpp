@@ -25,6 +25,7 @@
 struct Reverse : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Reverse";
     static constexpr bool kTimeDependent = false;
+    static constexpr uint32_t kMaxChannels = 2;
 
     vivid::Param<float> phase    {"phase",    0.0f,  0.0f, 1.0f};
     vivid::Param<int>   clock    {"clock",    0, {"Free","External","Metronome"}};
@@ -34,7 +35,7 @@ struct Reverse : vivid::OperatorBase, vivid::AudioProcessable {
     vivid::Param<float> transition_ms{"transition_ms", 6.0f, 0.0f, 40.0f};
     vivid::Param<float> mix   {"mix",    1.0f,  0.0f, 1.0f};
 
-    glitch::CircularBuffer buf_;
+    glitch::CircularBuffer buf_[kMaxChannels];
     glitch::WhiteNoise     rng_;
     glitch::TempoTracker   tempo_;
     float prev_phase_ = 0.0f;
@@ -77,12 +78,11 @@ struct Reverse : vivid::OperatorBase, vivid::AudioProcessable {
     }
 
     void process_audio(const VividAudioContext* ctx) override {
-        buf_.init(ctx->sample_rate);
+        uint32_t nch = ctx->input_channel_counts ? ctx->input_channel_counts[0] : 1u;
+        if (nch > kMaxChannels) nch = kMaxChannels;
+        for (uint32_t c = 0; c < nch; c++) buf_[c].init(ctx->sample_rate);
 
-        float* in  = ctx->input_buffers[0];
-        float* out = ctx->output_buffers[0];
         uint32_t frames = ctx->buffer_size;
-
         int  clk = clock.int_value();
         auto metro = vivid::metronome_transport(ctx);
         float cur_phase = (clk == 2) ? metro.beat_phase : phase.value;
@@ -98,15 +98,14 @@ struct Reverse : vivid::OperatorBase, vivid::AudioProcessable {
         } else {
             slice_samples = glitch::resolve_tempo_locked_samples(
                 clk == 1, size.value, division.int_value(), tempo_,
-                ctx->sample_rate, 1, buf_.size > 0 ? buf_.size - 1 : 0);
+                ctx->sample_rate, 1, buf_[0].size > 0 ? buf_[0].size - 1 : 0);
         }
 
         if (trigger_now && state_ == Passthrough) {
             if (rng_.next_unipolar() < chance.value) {
                 state_     = Reversing;
                 slice_len_ = slice_samples;
-                // slice_end_ is the most recent sample (1 frame before write head)
-                slice_end_ = buf_.get_read_pos(1);
+                slice_end_ = buf_[0].get_read_pos(1);
                 slice_pos_ = 0;
             }
         }
@@ -115,25 +114,25 @@ struct Reverse : vivid::OperatorBase, vivid::AudioProcessable {
             transition_ms.value * 0.001f * static_cast<float>(ctx->sample_rate));
 
         for (uint32_t i = 0; i < frames; i++) {
-            buf_.write(in[i]);
+            for (uint32_t c = 0; c < nch; c++) {
+                const float* in_c  = ctx->input_buffers[0]  + c * frames;
+                float*       out_c = ctx->output_buffers[0] + c * frames;
+                buf_[c].write(in_c[i]);
+
+                if (state_ == Reversing) {
+                    float sample = buf_[c].read_reverse(slice_end_, static_cast<double>(slice_pos_));
+                    float cf = glitch::crossfade_coeff(slice_pos_, slice_len_, 128);
+                    sample *= cf;
+                    float transition_gain = glitch::crossfade_coeff(slice_pos_, slice_len_, transition_samples);
+                    float wet_gain = wet * transition_gain;
+                    out_c[i] = in_c[i] * (1.0f - wet_gain) + sample * wet_gain;
+                } else {
+                    out_c[i] = in_c[i];
+                }
+            }
 
             if (state_ == Reversing) {
-                // Read backwards from slice_end_
-                float sample = buf_.read_reverse(slice_end_, static_cast<double>(slice_pos_));
-
-                // 128-sample crossfade at edges
-                float cf = glitch::crossfade_coeff(slice_pos_, slice_len_, 128);
-                sample *= cf;
-                float transition_gain = glitch::crossfade_coeff(slice_pos_, slice_len_, transition_samples);
-                float wet_gain = wet * transition_gain;
-                out[i] = in[i] * (1.0f - wet_gain) + sample * wet_gain;
-
-                slice_pos_++;
-                if (slice_pos_ >= slice_len_) {
-                    state_ = Passthrough;
-                }
-            } else {
-                out[i] = in[i];
+                if (++slice_pos_ >= slice_len_) state_ = Passthrough;
             }
         }
 

@@ -27,6 +27,7 @@
 struct Scratch : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Scratch";
     static constexpr bool kTimeDependent = false;
+    static constexpr uint32_t kMaxChannels = 2;
 
     vivid::Param<float> phase     {"phase",      0.0f,   0.0f,   1.0f};
     vivid::Param<int>   clock     {"clock",      0, {"External","Metronome"}};
@@ -37,7 +38,7 @@ struct Scratch : vivid::OperatorBase, vivid::AudioProcessable {
     vivid::Param<int>   motion    {"motion",     0, {"BackForth","Forward","Backward","Random"}};
     vivid::Param<float> mix       {"mix",        1.0f,   0.0f,   1.0f};
 
-    glitch::CircularBuffer buf_;
+    glitch::CircularBuffer buf_[kMaxChannels];
     glitch::WhiteNoise     rng_;
     float prev_phase_ = 0.0f;
 
@@ -83,12 +84,11 @@ struct Scratch : vivid::OperatorBase, vivid::AudioProcessable {
     }
 
     void process_audio(const VividAudioContext* ctx) override {
-        buf_.init(ctx->sample_rate);
+        uint32_t nch = ctx->input_channel_counts ? ctx->input_channel_counts[0] : 1u;
+        if (nch > kMaxChannels) nch = kMaxChannels;
+        for (uint32_t c = 0; c < nch; c++) buf_[c].init(ctx->sample_rate);
 
-        float* in  = ctx->input_buffers[0];
-        float* out = ctx->output_buffers[0];
         uint32_t frames = ctx->buffer_size;
-
         auto  metro = vivid::metronome_transport(ctx);
         float cur_phase = (clock.int_value() == 1) ? metro.beat_phase : phase.value;
         float wet = mix.value;
@@ -100,59 +100,53 @@ struct Scratch : vivid::OperatorBase, vivid::AudioProcessable {
         if (glitch::detect_trigger(cur_phase, prev_phase_) && state_ == Passthrough) {
             if (rng_.next_unipolar() < chance.value) {
                 state_        = Scratching;
-                // Capture 2x region for back-forth room
                 region_len_   = scratch_samples * 2;
-                if (region_len_ >= buf_.size) region_len_ = buf_.size - 1;
-                region_start_ = buf_.get_read_pos(region_len_);
+                if (region_len_ >= buf_[0].size) region_len_ = buf_[0].size - 1;
+                region_start_ = buf_[0].get_read_pos(region_len_);
                 total_len_    = scratch_samples;
                 total_pos_    = 0;
                 read_pos_     = 0.0;
                 cur_speed_    = pick_speed();
-                direction_    = (cur_motion == 2) ? -1.0f : 1.0f; // Backward starts reversed
+                direction_    = (cur_motion == 2) ? -1.0f : 1.0f;
             }
         }
 
         for (uint32_t i = 0; i < frames; i++) {
-            buf_.write(in[i]);
-
+            // Update direction (shared, once per sample)
             if (state_ == Scratching) {
-                // Motion patterns
                 if (cur_motion == 0) {
-                    // BackForth: triangular direction oscillation
                     float half = static_cast<float>(total_len_) * 0.5f;
                     direction_ = (total_pos_ < static_cast<uint32_t>(half)) ? 1.0f : -1.0f;
                 } else if (cur_motion == 3) {
-                    // Random: 2% per-sample chance of direction flip + speed re-roll
                     if (rng_.next_unipolar() < 0.02f) {
                         direction_ = -direction_;
                         cur_speed_ = pick_speed();
                     }
                 }
+            }
 
-                // Read from buffer
-                double abs_pos = static_cast<double>(region_start_) + read_pos_;
-                float sample = buf_.read(abs_pos);
+            for (uint32_t c = 0; c < nch; c++) {
+                const float* in_c  = ctx->input_buffers[0]  + c * frames;
+                float*       out_c = ctx->output_buffers[0] + c * frames;
+                buf_[c].write(in_c[i]);
 
-                // Crossfade
-                float cf = glitch::crossfade_coeff(total_pos_, total_len_, 128);
-                sample *= cf;
+                if (state_ == Scratching) {
+                    double abs_pos = static_cast<double>(region_start_) + read_pos_;
+                    float sample = buf_[c].read(abs_pos);
+                    float cf = glitch::crossfade_coeff(total_pos_, total_len_, 128);
+                    sample *= cf;
+                    out_c[i] = in_c[i] * dry + sample * wet;
+                } else {
+                    out_c[i] = in_c[i];
+                }
+            }
 
-                out[i] = in[i] * dry + sample * wet;
-
-                // Advance read position
+            if (state_ == Scratching) {
                 read_pos_ += direction_ * cur_speed_;
-
-                // Clamp to captured region
                 if (read_pos_ < 0.0) read_pos_ = 0.0;
                 if (read_pos_ >= static_cast<double>(region_len_))
                     read_pos_ = static_cast<double>(region_len_) - 1.0;
-
-                total_pos_++;
-                if (total_pos_ >= total_len_) {
-                    state_ = Passthrough;
-                }
-            } else {
-                out[i] = in[i];
+                if (++total_pos_ >= total_len_) state_ = Passthrough;
             }
         }
 

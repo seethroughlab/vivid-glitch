@@ -27,6 +27,7 @@
 struct Stretch : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Stretch";
     static constexpr bool kTimeDependent = false;
+    static constexpr uint32_t kMaxChannels = 2;
 
     vivid::Param<float> phase     {"phase",      0.0f, 0.0f,  1.0f};
     vivid::Param<float> chance    {"chance",     0.3f, 0.0f,  1.0f};
@@ -37,7 +38,7 @@ struct Stretch : vivid::OperatorBase, vivid::AudioProcessable {
     vivid::Param<float> overlap   {"overlap",    0.5f,  0.25f, 0.75f};
     vivid::Param<float> mix       {"mix",        1.0f,  0.0f,  1.0f};
 
-    glitch::CircularBuffer buf_;
+    glitch::CircularBuffer buf_[kMaxChannels];
     glitch::WhiteNoise     rng_;
     float prev_phase_ = 0.0f;
 
@@ -45,18 +46,18 @@ struct Stretch : vivid::OperatorBase, vivid::AudioProcessable {
 
     struct Grain {
         bool     active    = false;
-        uint32_t pos       = 0;   // position within grain
-        uint32_t length    = 0;   // grain length in samples
-        double   buf_start = 0.0; // where in the circular buffer this grain reads from
+        uint32_t pos       = 0;
+        uint32_t length    = 0;
+        double   buf_start = 0.0;
     };
 
     enum State { Passthrough, Stretching };
     State    state_            = Passthrough;
     uint32_t source_start_     = 0;
     uint32_t source_len_       = 0;
-    uint32_t total_len_        = 0; // stretched output length
+    uint32_t total_len_        = 0;
     uint32_t total_pos_        = 0;
-    double   source_phase_     = 0.0; // progress through source (0..1)
+    double   source_phase_     = 0.0;
     uint32_t next_grain_timer_ = 0;
     Grain    grains_[kMaxGrains];
 
@@ -86,7 +87,6 @@ struct Stretch : vivid::OperatorBase, vivid::AudioProcessable {
         uint32_t g_len = static_cast<uint32_t>(grain_size.value * sr);
         if (g_len < 1) g_len = 1;
 
-        // Source position with randomization
         double src_pos = source_phase_ * source_len_;
         float rand_offset = rng_.next() * grain_rand.value * static_cast<float>(g_len);
         src_pos += rand_offset;
@@ -107,10 +107,10 @@ struct Stretch : vivid::OperatorBase, vivid::AudioProcessable {
     }
 
     void process_audio(const VividAudioContext* ctx) override {
-        buf_.init(ctx->sample_rate);
+        uint32_t nch = ctx->input_channel_counts ? ctx->input_channel_counts[0] : 1u;
+        if (nch > kMaxChannels) nch = kMaxChannels;
+        for (uint32_t c = 0; c < nch; c++) buf_[c].init(ctx->sample_rate);
 
-        float* in  = ctx->input_buffers[0];
-        float* out = ctx->output_buffers[0];
         uint32_t frames = ctx->buffer_size;
         uint32_t sr = ctx->sample_rate;
 
@@ -126,7 +126,7 @@ struct Stretch : vivid::OperatorBase, vivid::AudioProcessable {
             if (rng_.next_unipolar() < chance.value) {
                 state_        = Stretching;
                 source_len_   = src_samples;
-                source_start_ = buf_.get_read_pos(source_len_);
+                source_start_ = buf_[0].get_read_pos(source_len_);
                 total_len_    = static_cast<uint32_t>(source_len_ * fct);
                 if (total_len_ < 1) total_len_ = 1;
                 total_pos_    = 0;
@@ -136,59 +136,68 @@ struct Stretch : vivid::OperatorBase, vivid::AudioProcessable {
             }
         }
 
-        // Grain spawn interval
         uint32_t g_len = static_cast<uint32_t>(grain_size.value * sr);
         if (g_len < 1) g_len = 1;
         uint32_t spawn_interval = static_cast<uint32_t>(g_len * (1.0f - overlap.value));
         if (spawn_interval < 1) spawn_interval = 1;
 
-        // Expected overlapping grains for normalization
         float expected_overlap = static_cast<float>(g_len) / static_cast<float>(spawn_interval);
-        float norm = 1.0f / (expected_overlap * 0.5f); // Hann window average is 0.5
+        float norm = 1.0f / (expected_overlap * 0.5f);
 
         for (uint32_t i = 0; i < frames; i++) {
-            buf_.write(in[i]);
+            // Write all channels first
+            for (uint32_t c = 0; c < nch; c++) {
+                const float* in_c = ctx->input_buffers[0] + c * frames;
+                buf_[c].write(in_c[i]);
+            }
 
             if (state_ == Stretching) {
-                // Spawn grains
+                // Grain spawn (shared, once per sample)
                 if (next_grain_timer_ == 0) {
                     spawn_grain(sr);
                     next_grain_timer_ = spawn_interval;
                 }
                 next_grain_timer_--;
 
-                // Sum active grains
-                float sample = 0.0f;
+                // Sum grains per channel
+                for (uint32_t c = 0; c < nch; c++) {
+                    const float* in_c  = ctx->input_buffers[0]  + c * frames;
+                    float*       out_c = ctx->output_buffers[0] + c * frames;
+
+                    float sample = 0.0f;
+                    for (int g = 0; g < kMaxGrains; g++) {
+                        if (!grains_[g].active) continue;
+                        double read_pos = grains_[g].buf_start + grains_[g].pos;
+                        float grain_sample = buf_[c].read(read_pos);
+                        float window = hann_window(grains_[g].pos, grains_[g].length);
+                        sample += grain_sample * window;
+                    }
+                    sample *= norm;
+
+                    float cf = glitch::crossfade_coeff(total_pos_, total_len_, 128);
+                    sample *= cf;
+
+                    out_c[i] = in_c[i] * dry + sample * wet;
+                }
+
+                // Advance grain positions (shared, once per sample)
                 for (int g = 0; g < kMaxGrains; g++) {
                     if (!grains_[g].active) continue;
-                    double read_pos = grains_[g].buf_start + grains_[g].pos;
-                    float grain_sample = buf_.read(read_pos);
-                    float window = hann_window(grains_[g].pos, grains_[g].length);
-                    sample += grain_sample * window;
-
                     grains_[g].pos++;
                     if (grains_[g].pos >= grains_[g].length)
                         grains_[g].active = false;
                 }
 
-                sample *= norm;
-
-                // Crossfade at effect boundaries
-                float cf = glitch::crossfade_coeff(total_pos_, total_len_, 128);
-                sample *= cf;
-
-                out[i] = in[i] * dry + sample * wet;
-
-                // Advance source phase
                 source_phase_ += 1.0 / static_cast<double>(total_len_);
                 if (source_phase_ > 1.0) source_phase_ = 1.0;
 
-                total_pos_++;
-                if (total_pos_ >= total_len_) {
-                    state_ = Passthrough;
-                }
+                if (++total_pos_ >= total_len_) state_ = Passthrough;
             } else {
-                out[i] = in[i];
+                for (uint32_t c = 0; c < nch; c++) {
+                    const float* in_c  = ctx->input_buffers[0]  + c * frames;
+                    float*       out_c = ctx->output_buffers[0] + c * frames;
+                    out_c[i] = in_c[i];
+                }
             }
         }
 

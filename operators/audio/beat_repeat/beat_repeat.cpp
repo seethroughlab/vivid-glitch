@@ -20,6 +20,7 @@
 struct BeatRepeat : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "BeatRepeat";
     static constexpr bool kTimeDependent = false;
+    static constexpr uint32_t kMaxChannels = 2;
 
     vivid::Param<float> phase   {"phase",    0.0f,  0.0f,  1.0f};
     vivid::Param<int>   clock   {"clock",    0, {"Free","External","Metronome"}};
@@ -30,7 +31,7 @@ struct BeatRepeat : vivid::OperatorBase, vivid::AudioProcessable {
     vivid::Param<float> decay   {"decay",    0.1f,  0.0f,  1.0f};
     vivid::Param<float> mix     {"mix",      1.0f,  0.0f,  1.0f};
 
-    glitch::CircularBuffer buf_;
+    glitch::CircularBuffer buf_[kMaxChannels];
     glitch::WhiteNoise     rng_;
     glitch::TempoTracker   tempo_;
     float prev_phase_ = 0.0f;
@@ -62,13 +63,12 @@ struct BeatRepeat : vivid::OperatorBase, vivid::AudioProcessable {
     }
 
     void process_audio(const VividAudioContext* ctx) override {
-        buf_.init(ctx->sample_rate);
+        uint32_t nch = ctx->input_channel_counts ? ctx->input_channel_counts[0] : 1u;
+        if (nch > kMaxChannels) nch = kMaxChannels;
+        for (uint32_t c = 0; c < nch; c++) buf_[c].init(ctx->sample_rate);
 
-        float*   in     = ctx->input_buffers[0];
-        float*   out    = ctx->output_buffers[0];
         uint32_t frames = ctx->buffer_size;
         uint32_t sr     = ctx->sample_rate;
-
         int  clk = clock.int_value();
         auto metro = vivid::metronome_transport(ctx);
         float cur_phase = (clk == 2) ? metro.beat_phase : phase.value;
@@ -84,14 +84,14 @@ struct BeatRepeat : vivid::OperatorBase, vivid::AudioProcessable {
         } else {
             slice_samples = glitch::resolve_tempo_locked_samples(
                 clk == 1, size.value, division.int_value(), tempo_,
-                sr, 1, buf_.size > 0 ? buf_.size - 1 : 0);
+                sr, 1, buf_[0].size > 0 ? buf_[0].size - 1 : 0);
         }
 
         if (trigger_now && state_ == Passthrough) {
             if (rng_.next_unipolar() < chance.value) {
                 state_        = Repeating;
                 slice_len_    = slice_samples;
-                slice_start_  = buf_.get_read_pos(slice_len_);
+                slice_start_  = buf_[0].get_read_pos(slice_len_);
                 slice_pos_    = 0;
                 current_rep_  = 0;
                 total_reps_   = count.int_value();
@@ -101,20 +101,26 @@ struct BeatRepeat : vivid::OperatorBase, vivid::AudioProcessable {
         }
 
         for (uint32_t i = 0; i < frames; i++) {
-            buf_.write(in[i]);
+            for (uint32_t c = 0; c < nch; c++) {
+                const float* in_c  = ctx->input_buffers[0]  + c * frames;
+                float*       out_c = ctx->output_buffers[0] + c * frames;
+                buf_[c].write(in_c[i]);
+
+                if (state_ == Repeating) {
+                    float sample = buf_[c].read(static_cast<double>(slice_start_) + slice_pos_);
+                    sample *= glitch::crossfade_coeff(slice_pos_, slice_len_, 64) * rep_gain_;
+                    out_c[i] = in_c[i] * dry + sample * wet;
+                } else {
+                    out_c[i] = in_c[i];
+                }
+            }
 
             if (state_ == Repeating) {
-                float sample = buf_.read(static_cast<double>(slice_start_) + slice_pos_);
-                sample *= glitch::crossfade_coeff(slice_pos_, slice_len_, 64) * rep_gain_;
-                out[i] = in[i] * dry + sample * wet;
-
                 if (++slice_pos_ >= slice_len_) {
                     slice_pos_ = 0;
                     rep_gain_ *= decay_factor_;
                     if (++current_rep_ >= total_reps_) state_ = Passthrough;
                 }
-            } else {
-                out[i] = in[i];
             }
         }
 

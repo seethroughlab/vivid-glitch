@@ -19,12 +19,13 @@ static inline uint32_t tempo_samples(int div_index,
                                      float bpm, uint32_t sr) {
     if (bpm > 0.0f) return glitch::samples_from_bpm(bpm, div_index, sr);
     float mul      = glitch::division_multiplier(glitch::division_from_index(div_index));
-    float fallback = mul * 0.5f; // 120 BPM fallback before first beat measured
+    float fallback = mul * 0.5f;
     return glitch::resolve_tempo_locked_samples(true, fallback, div_index, tempo, sr, 1);
 }
 
 // ---------------------------------------------------------------------------
 // GlitchRepeat: capture a beat-sized slice, loop it N times with decay
+// read_one() reads current position; advance() steps state once per sample.
 // ---------------------------------------------------------------------------
 struct GlitchRepeat {
     vivid::Param<float> chance  {"repeat_chance",   0.2f,  0.0f, 1.0f};
@@ -52,16 +53,19 @@ struct GlitchRepeat {
         active_      = true;
     }
 
-    float process_one(const glitch::CircularBuffer& buf) {
+    float read_one(const glitch::CircularBuffer& buf) const {
         double rp = static_cast<double>(slice_start_) + slice_pos_;
         float  s  = buf.read(rp);
-        s *= glitch::crossfade_coeff(slice_pos_, slice_len_, 64) * rep_gain_;
+        return s * glitch::crossfade_coeff(slice_pos_, slice_len_, 64) * rep_gain_;
+    }
+
+    void advance() {
+        if (!active_) return;
         if (++slice_pos_ >= slice_len_) {
             slice_pos_ = 0;
             rep_gain_ *= (1.0f - decay.value);
             if (++rep_current_ >= total_reps_) active_ = false;
         }
-        return s;
     }
 };
 
@@ -88,13 +92,16 @@ struct GlitchReverse {
         active_    = true;
     }
 
-    float process_one(uint32_t sr, const glitch::CircularBuffer& buf) {
+    float read_one(uint32_t sr, const glitch::CircularBuffer& buf) const {
         uint32_t fade = static_cast<uint32_t>(transition_ms.value * 0.001f * sr);
         if (fade < 1) fade = 1;
         float s = buf.read_reverse(slice_end_, static_cast<double>(slice_pos_));
-        s *= glitch::crossfade_coeff(slice_pos_, slice_len_, fade);
+        return s * glitch::crossfade_coeff(slice_pos_, slice_len_, fade);
+    }
+
+    void advance() {
+        if (!active_) return;
         if (++slice_pos_ >= slice_len_) active_ = false;
-        return s;
     }
 };
 
@@ -142,16 +149,19 @@ struct GlitchStutter {
         active_      = true;
     }
 
-    float process_one(const glitch::CircularBuffer& buf) {
+    float read_one(const glitch::CircularBuffer& buf) const {
         double rp = static_cast<double>(slice_start_) + slice_pos_;
         float  s  = buf.read(rp);
-        s *= glitch::crossfade_coeff(slice_pos_, slice_len_, 64)
-           * envelope_gain(rep_current_, total_reps_);
+        return s * glitch::crossfade_coeff(slice_pos_, slice_len_, 64)
+                 * envelope_gain(rep_current_, total_reps_);
+    }
+
+    void advance() {
+        if (!active_) return;
         if (++slice_pos_ >= slice_len_) {
             slice_pos_ = 0;
             if (++rep_current_ >= total_reps_) active_ = false;
         }
-        return s;
     }
 };
 
@@ -203,7 +213,13 @@ struct GlitchScratch {
         active_       = true;
     }
 
-    float process_one(const glitch::CircularBuffer& buf) {
+    float read_one(const glitch::CircularBuffer& buf) const {
+        float s = buf.read(static_cast<double>(region_start_) + read_pos_);
+        return s * glitch::crossfade_coeff(total_pos_, total_len_, 128);
+    }
+
+    void advance() {
+        if (!active_) return;
         int cur_motion = motion.int_value();
         if (cur_motion == 0) {
             float half = static_cast<float>(total_len_) * 0.5f;
@@ -212,20 +228,18 @@ struct GlitchScratch {
             direction_ = -direction_;
             cur_speed_ = pick_speed();
         }
-        float s = buf.read(static_cast<double>(region_start_) + read_pos_);
-        s *= glitch::crossfade_coeff(total_pos_, total_len_, 128);
         read_pos_ += direction_ * cur_speed_;
         if (read_pos_ < 0.0) read_pos_ = 0.0;
         if (read_pos_ >= static_cast<double>(region_len_))
-            read_pos_  = static_cast<double>(region_len_) - 1.0;
+            read_pos_ = static_cast<double>(region_len_) - 1.0;
         if (++total_pos_ >= total_len_) active_ = false;
-        return s;
     }
 };
 constexpr float GlitchScratch::kSpeedPool[];
 
 // ---------------------------------------------------------------------------
 // GlitchTapeStop: cubic deceleration / quadratic acceleration with silence gap
+// compute_abs_pos() advances shared state once and returns the read position.
 // ---------------------------------------------------------------------------
 struct GlitchTapeStop {
     vivid::Param<float> chance         {"tape_chance",        0.08f, 0.0f, 1.0f};
@@ -240,6 +254,10 @@ struct GlitchTapeStop {
     uint32_t  stopped_count_ = 0, stopped_len_ = 0;
     double    read_offset_   = 0.0;
     bool      active_        = false;
+
+    // Kind of output for this sample
+    enum OutputKind { Passthrough, FromBuf, Silent };
+    struct FrameResult { OutputKind kind; uint32_t buf_abs; };
 
     bool is_active() const { return active_; }
 
@@ -261,34 +279,27 @@ struct GlitchTapeStop {
         active_      = true;
     }
 
-    float process_one(float in, uint32_t sr, const glitch::CircularBuffer& buf) {
+    // Advances shared state once per sample, returns the read descriptor.
+    // Call this once outside the channel loop.
+    FrameResult compute_frame(uint32_t sr, const glitch::CircularBuffer& buf) {
         if (state_ == Stopping) {
             float progress = static_cast<float>(state_pos_) / static_cast<float>(state_len_);
             float rate = (1.0f - progress) * (1.0f - progress) * (1.0f - progress);
             read_offset_ += rate;
             uint32_t fb = static_cast<uint32_t>(state_len_ - read_offset_);
             if (fb >= buf.size) fb = buf.size - 1;
-            float s = buf.read(static_cast<double>(buf.get_read_pos(fb)));
+            uint32_t abs = buf.get_read_pos(fb);
             if (++state_pos_ >= state_len_) {
-                if (mode.int_value() == 1) {
-                    state_  = Pass;
-                    active_ = false;
-                } else {
-                    state_         = Stopped;
-                    stopped_count_ = 0;
-                    stopped_len_   = sr / 10; // 100ms silence
-                }
+                if (mode.int_value() == 1) { state_ = Pass; active_ = false; }
+                else { state_ = Stopped; stopped_count_ = 0; stopped_len_ = sr / 10; }
             }
-            return s;
+            return {FromBuf, abs};
         }
         if (state_ == Stopped) {
             if (++stopped_count_ >= stopped_len_) {
-                state_     = Starting;
-                state_pos_ = 0;
-                state_len_ = start_len_;
-                read_offset_ = 0.0;
+                state_ = Starting; state_pos_ = 0; state_len_ = start_len_; read_offset_ = 0.0;
             }
-            return 0.0f;
+            return {Silent, 0};
         }
         if (state_ == Starting) {
             float progress = static_cast<float>(state_pos_) / static_cast<float>(state_len_);
@@ -296,28 +307,28 @@ struct GlitchTapeStop {
             read_offset_ += rate;
             uint32_t fb = static_cast<uint32_t>(state_len_ - read_offset_);
             if (fb >= buf.size) fb = buf.size - 1;
-            float s = buf.read(static_cast<double>(buf.get_read_pos(fb)));
-            if (++state_pos_ >= state_len_) {
-                state_  = Pass;
-                active_ = false;
-            }
-            return s;
+            uint32_t abs = buf.get_read_pos(fb);
+            if (++state_pos_ >= state_len_) { state_ = Pass; active_ = false; }
+            return {FromBuf, abs};
         }
-        return in;
+        return {Passthrough, 0};
     }
 };
 
 // ---------------------------------------------------------------------------
-// GlitchFreqShift: 4-stage allpass Hilbert burst with simple LFO modulation
+// GlitchFreqShift: 4-stage allpass Hilbert burst — per-channel filter state
 // ---------------------------------------------------------------------------
+static constexpr uint32_t kGlitchMaxChannels = 2;
+
 struct GlitchFreqShift {
     vivid::Param<float> chance   {"shift_chance",    0.1f,    0.0f,    1.0f};
     vivid::Param<int>   division {"shift_division",   2, {"1/1","1/2","1/4","1/8","1/16","1/32","1/4T","1/8T","1/4D","1/8D"}};
     vivid::Param<float> shift_hz {"shift_hz",        30.0f, -500.0f, 500.0f};
     vivid::Param<float> mod_depth{"shift_mod_depth",  0.0f,    0.0f,  200.0f};
 
-    float  allpass_x_[4] = {}, allpass_y_[4] = {};
-    double osc_phase_    = 0.0;
+    float  allpass_x_[kGlitchMaxChannels][4] = {};
+    float  allpass_y_[kGlitchMaxChannels][4] = {};
+    double osc_phase_[kGlitchMaxChannels]    = {};
     float  active_shift_ = 0.0f;
     uint32_t pos_ = 0, len_ = 0;
     bool   active_ = false;
@@ -328,35 +339,42 @@ struct GlitchFreqShift {
                      const glitch::CircularBuffer& /*buf*/, const glitch::TempoTracker& tempo,
                      float bpm) {
         if (active_ || rng.next_unipolar() >= chance.value) return;
-        len_         = tempo_samples(division.int_value(), tempo, bpm, sr);
-        pos_         = 0;
-        active_shift_= shift_hz.value;
-        osc_phase_   = 0.0;
-        for (int j = 0; j < 4; j++) allpass_x_[j] = allpass_y_[j] = 0.0f;
-        active_      = true;
+        len_          = tempo_samples(division.int_value(), tempo, bpm, sr);
+        pos_          = 0;
+        active_shift_ = shift_hz.value;
+        for (uint32_t c = 0; c < kGlitchMaxChannels; c++) {
+            osc_phase_[c] = 0.0;
+            for (int j = 0; j < 4; j++) allpass_x_[c][j] = allpass_y_[c][j] = 0.0f;
+        }
+        active_ = true;
     }
 
-    float process_one(float in, uint32_t sr) {
+    // Process one sample for a specific channel. Caller must call advance() once per sample
+    // after all channels are processed.
+    float read_one(float in, uint32_t sr, uint32_t ch) {
         static const float a_coeffs[4] = {
             0.6923878f, 0.9360654322959f, 0.9882295226860f, 0.9987488452737f
         };
         float x = in, q = x;
         for (int j = 0; j < 4; j++) {
-            float y = a_coeffs[j] * (x - allpass_y_[j]) + allpass_x_[j];
-            allpass_x_[j] = x;
-            allpass_y_[j] = y;
+            float y = a_coeffs[j] * (x - allpass_y_[ch][j]) + allpass_x_[ch][j];
+            allpass_x_[ch][j] = x;
+            allpass_y_[ch][j] = y;
             if (j == 1) q = y;
             x = y;
         }
-        // Mod depth: sine envelope across burst duration
         float progress = static_cast<float>(pos_) / static_cast<float>(len_);
         float mod = mod_depth.value * std::sin(progress * static_cast<float>(M_PI) * 4.0f);
-        float shifted = x * static_cast<float>(std::cos(osc_phase_ * 2.0 * M_PI))
-                      - q * static_cast<float>(std::sin(osc_phase_ * 2.0 * M_PI));
-        osc_phase_ += (active_shift_ + mod) / static_cast<double>(sr);
-        osc_phase_ -= std::floor(osc_phase_);
-        if (++pos_ >= len_) active_ = false;
+        float shifted = x * static_cast<float>(std::cos(osc_phase_[ch] * 2.0 * M_PI))
+                      - q * static_cast<float>(std::sin(osc_phase_[ch] * 2.0 * M_PI));
+        osc_phase_[ch] += (active_shift_ + mod) / static_cast<double>(sr);
+        osc_phase_[ch] -= std::floor(osc_phase_[ch]);
         return shifted;
+    }
+
+    void advance() {
+        if (!active_) return;
+        if (++pos_ >= len_) active_ = false;
     }
 };
 
@@ -366,6 +384,7 @@ struct GlitchFreqShift {
 struct Glitch : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "Glitch";
     static constexpr bool kTimeDependent = false;
+    static constexpr uint32_t kMaxChannels = kGlitchMaxChannels;
 
     vivid::Param<float> phase{"phase", 0.0f, 0.0f, 1.0f};
     vivid::Param<int>   clock{"clock", 0, {"External","Metronome"}};
@@ -378,7 +397,7 @@ struct Glitch : vivid::OperatorBase, vivid::AudioProcessable {
     GlitchTapeStop  tape_;
     GlitchFreqShift shift_;
 
-    glitch::CircularBuffer buf_;
+    glitch::CircularBuffer buf_[kMaxChannels];
     glitch::WhiteNoise     rng_;
     glitch::TempoTracker   tempo_;
     float prev_phase_ = 0.0f;
@@ -420,10 +439,10 @@ struct Glitch : vivid::OperatorBase, vivid::AudioProcessable {
     }
 
     void process_audio(const VividAudioContext* ctx) override {
-        buf_.init(ctx->sample_rate);
+        uint32_t nch = ctx->input_channel_counts ? ctx->input_channel_counts[0] : 1u;
+        if (nch > kMaxChannels) nch = kMaxChannels;
+        for (uint32_t c = 0; c < nch; c++) buf_[c].init(ctx->sample_rate);
 
-        float*   in     = ctx->input_buffers[0];
-        float*   out    = ctx->output_buffers[0];
         uint32_t frames = ctx->buffer_size;
         uint32_t sr     = ctx->sample_rate;
 
@@ -440,32 +459,69 @@ struct Glitch : vivid::OperatorBase, vivid::AudioProcessable {
         tempo_.update_block(frames, trigger);
 
         if (trigger) {
-            repeat_ .try_trigger(rng_, sr, buf_, tempo_, bpm);
-            reverse_.try_trigger(rng_, sr, buf_, tempo_, bpm);
-            stutter_.try_trigger(rng_, sr, buf_, tempo_, bpm);
-            scratch_.try_trigger(rng_, sr, buf_, tempo_, bpm);
-            tape_   .try_trigger(rng_, sr, buf_, tempo_, bpm);
-            shift_  .try_trigger(rng_, sr, buf_, tempo_, bpm);
+            repeat_ .try_trigger(rng_, sr, buf_[0], tempo_, bpm);
+            reverse_.try_trigger(rng_, sr, buf_[0], tempo_, bpm);
+            stutter_.try_trigger(rng_, sr, buf_[0], tempo_, bpm);
+            scratch_.try_trigger(rng_, sr, buf_[0], tempo_, bpm);
+            tape_   .try_trigger(rng_, sr, buf_[0], tempo_, bpm);
+            shift_  .try_trigger(rng_, sr, buf_[0], tempo_, bpm);
         }
 
         for (uint32_t i = 0; i < frames; i++) {
-            buf_.write(in[i]);
-
-            float wet_sum = 0.0f;
-            int   n_active = 0;
-
-            if (repeat_ .is_active()) { wet_sum += repeat_ .process_one(buf_);          n_active++; }
-            if (reverse_.is_active()) { wet_sum += reverse_.process_one(sr, buf_);      n_active++; }
-            if (stutter_.is_active()) { wet_sum += stutter_.process_one(buf_);          n_active++; }
-            if (scratch_.is_active()) { wet_sum += scratch_.process_one(buf_);          n_active++; }
-            if (tape_   .is_active()) { wet_sum += tape_   .process_one(in[i], sr, buf_); n_active++; }
-            if (shift_  .is_active()) { wet_sum += shift_  .process_one(in[i], sr);    n_active++; }
-
-            if (n_active > 0) {
-                out[i] = in[i] * dry + (wet_sum / static_cast<float>(n_active)) * wet;
-            } else {
-                out[i] = in[i];
+            // Write all channels to their buffers
+            for (uint32_t c = 0; c < nch; c++) {
+                const float* in_c = ctx->input_buffers[0] + c * frames;
+                buf_[c].write(in_c[i]);
             }
+
+            // Compute TapeStop's read descriptor once (advances shared state)
+            GlitchTapeStop::FrameResult tape_frame{GlitchTapeStop::Passthrough, 0};
+            if (tape_.is_active()) tape_frame = tape_.compute_frame(sr, buf_[0]);
+
+            int n_active = (repeat_.is_active()  ? 1 : 0)
+                         + (reverse_.is_active() ? 1 : 0)
+                         + (stutter_.is_active() ? 1 : 0)
+                         + (scratch_.is_active() ? 1 : 0)
+                         + (tape_.is_active()    ? 1 : 0)
+                         + (shift_.is_active()   ? 1 : 0);
+
+            // Process each channel using current (un-advanced) shared positions
+            for (uint32_t c = 0; c < nch; c++) {
+                const float* in_c  = ctx->input_buffers[0]  + c * frames;
+                float*       out_c = ctx->output_buffers[0] + c * frames;
+
+                if (n_active > 0) {
+                    float wet_sum = 0.0f;
+                    if (repeat_ .is_active()) wet_sum += repeat_ .read_one(buf_[c]);
+                    if (reverse_.is_active()) wet_sum += reverse_.read_one(sr, buf_[c]);
+                    if (stutter_.is_active()) wet_sum += stutter_.read_one(buf_[c]);
+                    if (scratch_.is_active()) wet_sum += scratch_.read_one(buf_[c]);
+                    if (tape_.is_active()) {
+                        switch (tape_frame.kind) {
+                            case GlitchTapeStop::FromBuf:
+                                wet_sum += buf_[c].read(static_cast<double>(tape_frame.buf_abs));
+                                break;
+                            case GlitchTapeStop::Silent:
+                                break;
+                            case GlitchTapeStop::Passthrough:
+                                wet_sum += in_c[i];
+                                break;
+                        }
+                    }
+                    if (shift_.is_active()) wet_sum += shift_.read_one(in_c[i], sr, c);
+                    out_c[i] = in_c[i] * dry + (wet_sum / static_cast<float>(n_active)) * wet;
+                } else {
+                    out_c[i] = in_c[i];
+                }
+            }
+
+            // Advance shared state once per sample (after all channels read)
+            repeat_ .advance();
+            reverse_.advance();
+            stutter_.advance();
+            scratch_.advance();
+            shift_  .advance();
+            // tape_ state was already advanced by compute_frame() above
         }
 
         prev_phase_ = cur_phase;

@@ -27,6 +27,7 @@
 struct TapeStop : vivid::OperatorBase, vivid::AudioProcessable {
     static constexpr const char* kName   = "TapeStop";
     static constexpr bool kTimeDependent = false;
+    static constexpr uint32_t kMaxChannels = 2;
 
     vivid::Param<float> phase     {"phase",      0.0f,  0.0f,  1.0f};
     vivid::Param<int>   clock     {"clock",      0, {"External","Metronome"}};
@@ -36,7 +37,7 @@ struct TapeStop : vivid::OperatorBase, vivid::AudioProcessable {
     vivid::Param<int>   mode      {"mode",       0, {"StopStart","Stop","Start"}};
     vivid::Param<float> mix       {"mix",        1.0f,  0.0f,  1.0f};
 
-    glitch::CircularBuffer buf_;
+    glitch::CircularBuffer buf_[kMaxChannels];
     glitch::WhiteNoise     rng_;
     float prev_phase_ = 0.0f;
 
@@ -64,24 +65,21 @@ struct TapeStop : vivid::OperatorBase, vivid::AudioProcessable {
     }
 
     void process_audio(const VividAudioContext* ctx) override {
-        buf_.init(ctx->sample_rate);
+        uint32_t nch = ctx->input_channel_counts ? ctx->input_channel_counts[0] : 1u;
+        if (nch > kMaxChannels) nch = kMaxChannels;
+        for (uint32_t c = 0; c < nch; c++) buf_[c].init(ctx->sample_rate);
 
-        float* in  = ctx->input_buffers[0];
-        float* out = ctx->output_buffers[0];
         uint32_t frames = ctx->buffer_size;
         uint32_t sr = ctx->sample_rate;
-
         auto  metro = vivid::metronome_transport(ctx);
         float cur_phase = (clock.int_value() == 1) ? metro.beat_phase : phase.value;
         float wet = mix.value;
         float dry = 1.0f - wet;
         int   cur_mode = mode.int_value();
 
-        // Trigger check
         if (glitch::detect_trigger(cur_phase, prev_phase_) && state_ == Pass) {
             if (rng_.next_unipolar() < chance.value) {
                 if (cur_mode == 2) {
-                    // Start mode: jump straight to Starting
                     state_     = Starting;
                     state_pos_ = 0;
                     state_len_ = static_cast<uint32_t>(start_time.value * sr);
@@ -98,35 +96,44 @@ struct TapeStop : vivid::OperatorBase, vivid::AudioProcessable {
         }
 
         for (uint32_t i = 0; i < frames; i++) {
-            buf_.write(in[i]);
+            // Write all channels to their buffers
+            for (uint32_t c = 0; c < nch; c++) {
+                const float* in_c = ctx->input_buffers[0] + c * frames;
+                buf_[c].write(in_c[i]);
+            }
 
             if (state_ == Stopping) {
                 float progress = static_cast<float>(state_pos_) / static_cast<float>(state_len_);
-                float rate = (1.0f - progress) * (1.0f - progress) * (1.0f - progress); // cubic
+                float rate = (1.0f - progress) * (1.0f - progress) * (1.0f - progress);
 
                 read_offset_ += rate;
                 uint32_t frames_back = static_cast<uint32_t>(state_len_ - read_offset_);
-                if (frames_back >= buf_.size) frames_back = buf_.size - 1;
-                float sample = buf_.read(static_cast<double>(buf_.get_read_pos(frames_back)));
+                if (frames_back >= buf_[0].size) frames_back = buf_[0].size - 1;
+                uint32_t read_abs = buf_[0].get_read_pos(frames_back);
 
-                out[i] = in[i] * dry + sample * wet;
-
+                for (uint32_t c = 0; c < nch; c++) {
+                    const float* in_c  = ctx->input_buffers[0]  + c * frames;
+                    float*       out_c = ctx->output_buffers[0] + c * frames;
+                    float sample = buf_[c].read(static_cast<double>(read_abs));
+                    out_c[i] = in_c[i] * dry + sample * wet;
+                }
                 state_pos_++;
                 if (state_pos_ >= state_len_) {
                     if (cur_mode == 1) {
-                        // Stop-only: return to passthrough
                         state_ = Pass;
                     } else {
-                        state_       = Stopped;
+                        state_         = Stopped;
                         stopped_count_ = 0;
-                        stopped_len_   = sr / 10; // 100ms silence
+                        stopped_len_   = sr / 10;
                     }
                 }
             } else if (state_ == Stopped) {
-                out[i] = in[i] * dry; // silence for wet portion
-
-                stopped_count_++;
-                if (stopped_count_ >= stopped_len_) {
+                for (uint32_t c = 0; c < nch; c++) {
+                    const float* in_c  = ctx->input_buffers[0]  + c * frames;
+                    float*       out_c = ctx->output_buffers[0] + c * frames;
+                    out_c[i] = in_c[i] * dry;
+                }
+                if (++stopped_count_ >= stopped_len_) {
                     state_     = Starting;
                     state_pos_ = 0;
                     state_len_ = static_cast<uint32_t>(start_time.value * sr);
@@ -135,21 +142,27 @@ struct TapeStop : vivid::OperatorBase, vivid::AudioProcessable {
                 }
             } else if (state_ == Starting) {
                 float progress = static_cast<float>(state_pos_) / static_cast<float>(state_len_);
-                float rate = progress * progress; // quadratic
+                float rate = progress * progress;
 
                 read_offset_ += rate;
                 uint32_t frames_back = static_cast<uint32_t>(state_len_ - read_offset_);
-                if (frames_back >= buf_.size) frames_back = buf_.size - 1;
-                float sample = buf_.read(static_cast<double>(buf_.get_read_pos(frames_back)));
+                if (frames_back >= buf_[0].size) frames_back = buf_[0].size - 1;
+                uint32_t read_abs = buf_[0].get_read_pos(frames_back);
 
-                out[i] = in[i] * dry + sample * wet;
-
-                state_pos_++;
-                if (state_pos_ >= state_len_) {
-                    state_ = Pass;
+                for (uint32_t c = 0; c < nch; c++) {
+                    const float* in_c  = ctx->input_buffers[0]  + c * frames;
+                    float*       out_c = ctx->output_buffers[0] + c * frames;
+                    float sample = buf_[c].read(static_cast<double>(read_abs));
+                    out_c[i] = in_c[i] * dry + sample * wet;
                 }
+                state_pos_++;
+                if (state_pos_ >= state_len_) state_ = Pass;
             } else {
-                out[i] = in[i];
+                for (uint32_t c = 0; c < nch; c++) {
+                    const float* in_c  = ctx->input_buffers[0]  + c * frames;
+                    float*       out_c = ctx->output_buffers[0] + c * frames;
+                    out_c[i] = in_c[i];
+                }
             }
         }
 
